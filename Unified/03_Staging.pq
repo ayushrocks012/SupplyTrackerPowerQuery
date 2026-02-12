@@ -6,7 +6,7 @@ let
     // --- Helper ---
     fn_GetLatestFile = (Folder as table, StartsWith as text, EndsWith as text) =>
         let
-            Filtered = Table.SelectRows(Folder, each Text.StartsWith([Name], StartsWith) and Text.EndsWith([Name], EndsWith)),
+            Filtered = Table.SelectRows(Folder, each Text.StartsWith([Name], StartsWith) and Text.EndsWith(Text.Lower([Name]), EndsWith)),
             Sorted = Table.Sort(Filtered, {{"Date modified", Order.Descending}}),
             Latest = Table.First(Sorted)[Content]
         in
@@ -54,19 +54,31 @@ let
         in
             Typed,
 
-    // 2. Inventory AUK (Reads 'Completed Bookings' *.xls)
+    // 2. Inventory AUK (Reads 'LX02' *.xlsx)
     stg_Inv_AUK = 
         let
-            FileContent = fn_GetLatestFile(DemandPath, "Completed Bookings", ".xls"),
+            FileContent = fn_GetLatestFile(DemandPath, "LX02", ".xlsx"),
             Excel = Excel.Workbook(FileContent, null, true),
-            Sheet = try Excel{[Item="Data"]} otherwise Excel{[Name="Data"]}, 
+            Sheet = try Excel{[Item="Sheet1"]} otherwise Excel{[Name="Sheet1"]}, 
             Data = Sheet[Data],
             Promoted = Table.PromoteHeaders(Data, [PromoteAllScalars=true]),
-            // Columns: Material, Batch, Available stock...
-            Renamed = Table.RenameColumns(Promoted, {{"Material", "Product Code"}, {"Batch", "Batch ID"}, {"Available stock", "Stock"}, {"Pick quantity", "Pick Qty"}}),
+            // Columns: Material, Material Description, Batch, Available stock...
+            Renamed = Table.RenameColumns(Promoted, {{"Material", "Product Code"}, {"Batch", "Batch ID"}, {"Available stock", "Stock"}, {"Pick quantity", "Pick Qty"}, {"SLED/BBD", "Expiry"}}),
             WithWarehouse = Table.AddColumn(Renamed, "Warehouse", each "075-UK"),
             NetInv = Table.AddColumn(WithWarehouse, "Net Inventory", each [Stock] + [Pick Qty]),
-            Selected = Table.SelectColumns(NetInv, {"Product Code", "Batch ID", "Net Inventory", "Warehouse", "SLED/BBD"})
+            
+            // Logic for Storage Type (Essential for AUK)
+            CombinedStorage = Table.AddColumn(NetInv, "Combined Storage Type", each 
+                if [Storage Type] = "014" or [Storage Type] = "011" then "AVAILABLE" 
+                else if [Storage Type] = "802" then "RECEIPT" 
+                else if [Storage Type] = "916" then "ALLOCATED" 
+                else if [Storage Type] = "999" then "SCHROTT"
+                else "NEW STORAGE TYPE TO BE DECIDED"
+            ),
+            
+            Filtered = Table.SelectRows(CombinedStorage, each ([Combined Storage Type] = "AVAILABLE" or [Combined Storage Type] = "RECEIPT")),
+            
+            Selected = Table.SelectColumns(Filtered, {"Product Code", "Batch ID", "Net Inventory", "Warehouse", "Expiry"})
         in
             Selected,
 
@@ -81,8 +93,6 @@ let
             // Columns: SKU ID, x_qty_available...
             Renamed = Table.RenameColumns(Promoted, {{"SKU ID", "Product Code"}, {"x_qty_available", "Net Inventory"}}),
             WithWarehouse = Table.AddColumn(Renamed, "Warehouse", each "075-UL"),
-            // AUL file doesn't seem to have Batch or Expiry in the SKU view, need to check AUL_Inv_Batch for that?
-            // For now, mapping what we have.
             Selected = Table.SelectColumns(WithWarehouse, {"Product Code", "Net Inventory", "Warehouse"})
         in
             Selected
