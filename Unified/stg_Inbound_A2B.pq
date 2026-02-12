@@ -3,13 +3,16 @@ let
     Source = SharePoint.Contents("https://abbott.sharepoint.com/sites/GB-AN-HeadOffice", [ApiVersion = 15]),
     DemandPath = Source{[Name="Shared Documents"]}[Content]{[Name="General"]}[Content]{[Name="Demand"]}[Content]{[Name="Master Data Files"]}[Content]{[Name="Daily Tracker Files"]}[Content],
     
-    // --- Helper ---
-    fn_GetLatestFile = #"01_Functions"[fn_GetLatestFile], // Assumes 01_Functions record is still used, or we inline it. 
-    // User stuck with record for functions/params?
-    // User said "separate queries... for easy in begineer understanding".
-    // I will stick to referencing the record query for functions as that's cleaner than duplicating function code.
-    
-    FileContent = fn_GetLatestFile(DemandPath, "booking_overview", ".csv"),
+    // --- Helper Logic (Inlined) ---
+    GetLatestFile = (Folder as table, StartsWith as text, EndsWith as text) =>
+        let
+            Filtered = Table.SelectRows(Folder, each Text.StartsWith([Name], StartsWith) and Text.EndsWith([Name], EndsWith)),
+            Sorted = Table.Sort(Filtered, {{"Date modified", Order.Descending}}),
+            Latest = Table.First(Sorted)[Content]
+        in
+            Latest,
+
+    FileContent = GetLatestFile(DemandPath, "booking_overview", ".csv"),
     Csv = Csv.Document(FileContent, [Delimiter=",", Encoding=1252, QuoteStyle=QuoteStyle.Csv]),
     Promoted = Table.PromoteHeaders(Csv, [PromoteAllScalars=true]),
     Duplicated = Table.DuplicateColumn(Promoted, "Your Reference", "Your Reference - Copy"),
@@ -37,7 +40,6 @@ let
             else if [Sub status] = "Completed" then "Delivered"
             else "Check Location"
     ),
-    // FIX: Add Custom Cleared Status
     WithCustoms = Table.AddColumn(WithLocation, "Custom Cleared Status", each if [Customs Cleared]= "" then "No" else "Yes"),
     
     Typed = Table.TransformColumnTypes(WithCustoms, {
