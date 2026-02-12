@@ -19,17 +19,25 @@ let
     TableData = try Excel{[Item="MergedData", Kind="Table"]}[Data] 
                 otherwise Excel{[Name="MergedData"]}[Data],
     
-    // FIX: Promote Headers (User noted this was missing)
+    // FIX: Promote Headers
     Promoted = Table.PromoteHeaders(TableData, [PromoteAllScalars=true]),
     
     // Logic from MergedData.m
     FilteredRows = Table.SelectRows(Promoted, each ([#"Location/Plant/Site"] = "075-UK" or [#"Location/Plant/Site"] = "075-UL")),
     CleanedDate = Table.TransformColumns(FilteredRows,{{"RowDate", each Date.From(_), type date}}),
     
-    // Merging with SKUBIBLE (V2 or V3? Original used V2)
-    SKUBible = dim_SKUBible_V2, // Dependency on dim_SKUBible_V2
-    Merged = Table.NestedJoin(CleanedDate, {"ECC CODE"}, SKUBible, {"ECC CODE"}, "SKUBIBLE", JoinKind.LeftOuter),
-    Expanded = Table.ExpandTableColumn(Merged, "SKUBIBLE", {"DESCRIPTION"}, {"DESCRIPTION"}),
+    // Merging with SKUBIBLE V2
+    // FIX: Join on "Local Item number" -> "LOCAL ITEM NBR"
+    SKUBible = dim_SKUBible_V2, 
+    Merged = Table.NestedJoin(CleanedDate, {"Local Item number"}, SKUBible, {"LOCAL ITEM NBR"}, "SKUBIBLE", JoinKind.LeftOuter),
+    
+    // FIX: Expand correct columns
+    Expanded = Table.ExpandTableColumn(
+        Merged, 
+        "SKUBIBLE", 
+        {"DESC", "1-6-3-3", "SHORT 1633", "ECC CODE", "ADULT/PAED", "REIMBURSED/OOP", "FORECAST TIER", "FORECAST MID-TIER", "FORECAST SUB-TIER", "GROWTH DRIVER", "GROWTH SUB-DRIVER", "PRODUCT STATUS"}, 
+        {"DESC", "1-6-3-3", "SHORT 1633", "ECC CODE", "ADULT/PAED", "REIMBURSED/OOP", "FORECAST TIER", "FORECAST MID-TIER", "FORECAST SUB-TIER", "GROWTH DRIVER", "GROWTH SUB-DRIVER", "PRODUCT STATUS"}
+    ),
     
     Typed = Table.TransformColumnTypes(Expanded,{{"Data", Int64.Type}, {"RowDate", type date}})
 in
