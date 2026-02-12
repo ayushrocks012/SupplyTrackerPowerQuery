@@ -16,7 +16,11 @@ let
     Csv = Csv.Document(FileContent, [Delimiter=",", Encoding=1252, QuoteStyle=QuoteStyle.Csv]),
     Promoted = Table.PromoteHeaders(Csv, [PromoteAllScalars=true]),
     Duplicated = Table.DuplicateColumn(Promoted, "Your Reference", "Your Reference - Copy"),
-    Split = Table.SplitColumn(Duplicated, "Your Reference - Copy", Splitter.SplitTextByDelimiter(" / ", QuoteStyle.Csv), {"Breda Tour", "Departure"}),
+    
+    // FIX: Normalize " / " to " " and split by LAST space to handle "Tour Ref / 123" or "Tour Ref 123"
+    Normalized = Table.TransformColumns(Duplicated, {{"Your Reference - Copy", each Text.Replace(_, " / ", " "), type text}}),
+    Split = Table.SplitColumn(Normalized, "Your Reference - Copy", Splitter.SplitTextByDelimiter(" ", QuoteStyle.Csv, Occurrence.Last), {"Breda Tour", "Departure"}),
+    
     Renamed = Table.RenameColumns(Split, {{"Status", "Sub status"}, {"Delivery Date", "Expected Delivery Date"}}),
     WithStatus = Table.AddColumn(Renamed, "Status", each 
         if [Sub status] = "Accepted" then "Pending & Accepted" 
