@@ -15,13 +15,15 @@ let
     FileContent = GetLatestFile(DemandPath, "MasterMassiveNew", ".xlsb"),
     Excel = Excel.Workbook(FileContent, null, true),
     
-    // FIX: Correct Table/Sheet Name. Original was "MergedData".
-    // Try "MergedData" as Item (Table) first, then as Sheet if needed.
-    Table = try Excel{[Item="MergedData", Kind="Table"]}[Data] 
-            otherwise Excel{[Name="MergedData"]}[Data],
+    // Attempt to get Table or Sheet
+    TableData = try Excel{[Item="MergedData", Kind="Table"]}[Data] 
+                otherwise Excel{[Name="MergedData"]}[Data],
+    
+    // FIX: Promote Headers (User noted this was missing)
+    Promoted = Table.PromoteHeaders(TableData, [PromoteAllScalars=true]),
     
     // Logic from MergedData.m
-    FilteredRows = Table.SelectRows(Table, each ([#"Location/Plant/Site"] = "075-UK" or [#"Location/Plant/Site"] = "075-UL")),
+    FilteredRows = Table.SelectRows(Promoted, each ([#"Location/Plant/Site"] = "075-UK" or [#"Location/Plant/Site"] = "075-UL")),
     CleanedDate = Table.TransformColumns(FilteredRows,{{"RowDate", each Date.From(_), type date}}),
     
     // Merging with SKUBIBLE (V2 or V3? Original used V2)
