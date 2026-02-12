@@ -55,10 +55,11 @@ let
 
     WithNetInv = Table.AddColumn(WithStorageBin, "Net Inventory", each if [Qty] < 0 then 0 else [Qty] - [Qty Alloc]),
     
-    // Selection and Grouping (AUL aggregates duplicates? Original code groups.)
-    Renamed = Table.RenameColumns(WithNetInv, {{"Client Product Code", "Product Code"}}),
+    // FIX: Do NOT rename "Client Product Code". Use existing "Product Code".
+    // Original query removed "Client Product Code" and grouped by "Product Code".
+    // This implies "Product Code" already exists in the file.
     
     // Original AUL_Inv_Batch logic grouped by these columns to sum Net Inventory
-    Grouped = Table.Group(Renamed, {"Product Code", "Batch", "Expiry", "Warehouse", "Combined Storage Type", "Combined Storage Bin"}, {{"NET INVENTORY", each List.Sum([Net Inventory]), type nullable number}})
+    Grouped = Table.Group(WithNetInv, {"Product Code", "Batch", "Expiry", "Warehouse", "Combined Storage Type", "Combined Storage Bin"}, {{"NET INVENTORY", each List.Sum([Net Inventory]), type nullable number}})
 in
     Grouped
