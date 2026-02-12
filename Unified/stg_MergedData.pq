@@ -1,7 +1,6 @@
 let
     // --- Dependencies (Hardcoded) ---
     Source = SharePoint.Contents("https://abbott.sharepoint.com/sites/GB-AN-HeadOffice", [ApiVersion = 15]),
-    // Correct Path: Demand > Master Data Files > DMF New
     DemandPath = Source{[Name="Shared Documents"]}[Content]{[Name="General"]}[Content]{[Name="Demand"]}[Content]{[Name="Master Data Files"]}[Content]{[Name="DMF New"]}[Content],
     
     // --- Helper Logic (Inlined) ---
@@ -15,7 +14,11 @@ let
 
     FileContent = GetLatestFile(DemandPath, "MasterMassiveNew", ".xlsb"),
     Excel = Excel.Workbook(FileContent, null, true),
-    Table = Excel{[Item="Data_1", Kind="Table"]}[Data],
+    
+    // FIX: Correct Table/Sheet Name. Original was "MergedData".
+    // Try "MergedData" as Item (Table) first, then as Sheet if needed.
+    Table = try Excel{[Item="MergedData", Kind="Table"]}[Data] 
+            otherwise Excel{[Name="MergedData"]}[Data],
     
     // Logic from MergedData.m
     FilteredRows = Table.SelectRows(Table, each ([#"Location/Plant/Site"] = "075-UK" or [#"Location/Plant/Site"] = "075-UL")),
