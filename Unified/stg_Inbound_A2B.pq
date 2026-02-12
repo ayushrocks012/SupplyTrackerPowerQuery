@@ -17,19 +17,43 @@ let
     Promoted = Table.PromoteHeaders(Csv, [PromoteAllScalars=true]),
     Duplicated = Table.DuplicateColumn(Promoted, "Your Reference", "Your Reference - Copy"),
     
-    // FIX: Handle " / " and Non-Breaking Spaces
-    // 1. Replace NBSP (#(00A0)) with Space (#(0020))
-    // 2. Replace " / " with " "
+    // FIX: Robust Split Logic
+    // 1. Normalize dividers to Space
     Normalized = Table.TransformColumns(Duplicated, {{
         "Your Reference - Copy", 
-        each Text.Trim(Text.Replace(Text.Replace(_, "#(00A0)", " "), " / ", " ")), 
+        each 
+            let
+                s0 = if _ = null then "" else _,
+                s1 = Text.Replace(s0, "#(00A0)", " "), // NBSP -> Space
+                s2 = Text.Replace(s1, " / ", " "),    // " / " -> Space
+                s3 = Text.Clean(s2),                  // Remove controls (tab/CR/LF)
+                s4 = Text.Trim(s3)                    // Trim edges
+            in
+                s4,
         type text
     }}),
     
-    // Split by LAST space
-    Split = Table.SplitColumn(Normalized, "Your Reference - Copy", Splitter.SplitTextByDelimiter(" ", QuoteStyle.Csv, Occurrence.Last), {"Breda Tour", "Departure"}),
+    // 2. Tokenize by Space and take Last as Departure
+    Split = Table.AddColumn(Normalized, "TempSplit", each 
+        let
+            original = [#"Your Reference - Copy"],
+            parts = Text.Split(original, " "),
+            nonEmpty = List.Select(parts, each _ <> ""),
+            count = List.Count(nonEmpty),
+            // Logic: If > 1 token, assume last is Departure. If 1 token, check if it looks numeric?
+            // For now, simpler: If > 1 token, take last. If 1, assume it's just Tour (no Departure).
+            // This aligns with "TGB66-2950 610157" -> TGB=Tour, 610157=Dep.
+            departure = if count > 1 then List.Last(nonEmpty) else null,
+            tour = if count > 1 then Text.Combine(List.RemoveLastN(nonEmpty, 1), " ") else original
+        in
+            [Breda Tour=tour, Departure=departure]
+    ),
     
-    Renamed = Table.RenameColumns(Split, {{"Status", "Sub status"}, {"Delivery Date", "Expected Delivery Date"}}),
+    Expanded = Table.ExpandRecordColumn(Split, "TempSplit", {"Breda Tour", "Departure"}),
+    
+    // Proceed with Renaming
+    Renamed = Table.RenameColumns(Expanded, {{"Status", "Sub status"}, {"Delivery Date", "Expected Delivery Date"}}),
+    
     WithStatus = Table.AddColumn(Renamed, "Status", each 
         if [Sub status] = "Accepted" then "Pending & Accepted" 
         else if [Sub status] = "Collected" then "Collected" 
@@ -61,7 +85,6 @@ let
         {"Departure", Int64.Type}
     }),
     
-    // Explicitly Select Columns (Removes blanks and unused columns)
     Selected = Table.SelectColumns(Typed, {"Booking ID", "Your Reference", "Collection Date", "Expected Delivery Date", "Sailing Date", "Breda Tour", "Departure", "Status", "Location", "Custom Cleared Status"})
 in
     Selected
