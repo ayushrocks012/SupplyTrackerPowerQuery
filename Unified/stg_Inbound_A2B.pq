@@ -1,5 +1,5 @@
 let
-    // --- Dependencies ---
+    // --- Dependencies (Hardcoded) ---
     Source = SharePoint.Contents("https://abbott.sharepoint.com/sites/GB-AN-HeadOffice", [ApiVersion = 15]),
     DemandPath = Source{[Name="Shared Documents"]}[Content]{[Name="General"]}[Content]{[Name="Demand"]}[Content]{[Name="Master Data Files"]}[Content]{[Name="Daily Tracker Files"]}[Content],
     
@@ -47,6 +47,9 @@ let
         {"Expected Delivery Date", type date}, 
         {"Sailing Date", type date}, 
         {"Departure", Int64.Type}
-    })
+    }),
+    
+    // Explicitly Select Columns (Removes blanks and unused columns)
+    Selected = Table.SelectColumns(Typed, {"Booking ID", "Your Reference", "Collection Date", "Expected Delivery Date", "Sailing Date", "Breda Tour", "Departure", "Status", "Location", "Custom Cleared Status"})
 in
-    Typed
+    Selected
