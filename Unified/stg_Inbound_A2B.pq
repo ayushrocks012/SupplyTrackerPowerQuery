@@ -17,8 +17,16 @@ let
     Promoted = Table.PromoteHeaders(Csv, [PromoteAllScalars=true]),
     Duplicated = Table.DuplicateColumn(Promoted, "Your Reference", "Your Reference - Copy"),
     
-    // FIX: Normalize " / " to " " and split by LAST space to handle "Tour Ref / 123" or "Tour Ref 123"
-    Normalized = Table.TransformColumns(Duplicated, {{"Your Reference - Copy", each Text.Replace(_, " / ", " "), type text}}),
+    // FIX: Handle " / " and Non-Breaking Spaces
+    // 1. Replace NBSP (#(00A0)) with Space (#(0020))
+    // 2. Replace " / " with " "
+    Normalized = Table.TransformColumns(Duplicated, {{
+        "Your Reference - Copy", 
+        each Text.Trim(Text.Replace(Text.Replace(_, "#(00A0)", " "), " / ", " ")), 
+        type text
+    }}),
+    
+    // Split by LAST space
     Split = Table.SplitColumn(Normalized, "Your Reference - Copy", Splitter.SplitTextByDelimiter(" ", QuoteStyle.Csv, Occurrence.Last), {"Breda Tour", "Departure"}),
     
     Renamed = Table.RenameColumns(Split, {{"Status", "Sub status"}, {"Delivery Date", "Expected Delivery Date"}}),
