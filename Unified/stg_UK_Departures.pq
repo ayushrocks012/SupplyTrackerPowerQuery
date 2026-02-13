@@ -36,7 +36,9 @@ let
         {"1633 Item Code", type text}, 
         {"Breda Status Date", type date}, 
         {"EXP_DATE", type date}, 
-        {"MFG_DATE", type date}
+        {"MFG_DATE", type date},
+        {"FORWARDER", type text},
+        {"Port of Discharge", type text}
     })
 in
     Typed
