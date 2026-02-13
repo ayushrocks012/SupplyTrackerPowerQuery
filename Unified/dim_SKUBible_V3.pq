@@ -5,4 +5,4 @@ let
     Table = Workbook{[Item="SKUBIBLE", Kind="Table"]}[Data],
     Filtered = Table.SelectRows(Table, each [AFFILIATE] = "UNITED KINGDOM")
 in
-    Table.Buffer(Filtered)
+    Filtered

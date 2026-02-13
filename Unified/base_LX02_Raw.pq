@@ -9,4 +9,4 @@ let
     Data = Sheet[Data],
     Promoted = Table.PromoteHeaders(Data, [PromoteAllScalars=true])
 in
-    Table.Buffer(Promoted)
+    Promoted

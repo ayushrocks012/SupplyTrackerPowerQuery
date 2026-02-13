@@ -6,4 +6,4 @@ let
     Filtered = Table.SelectRows(Table, each [AFFILIATE] = "UNITED KINGDOM"),
     Typed = Table.TransformColumnTypes(Filtered, {{"ECC CODE", type text}})
 in
-    Table.Buffer(Typed)
+    Typed

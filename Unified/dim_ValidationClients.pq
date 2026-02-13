@@ -6,4 +6,4 @@ let
     Cleaned = Table.SelectRows(Table, each not List.IsEmpty(List.RemoveMatchingItems(Record.FieldValues(_), {"", null}))),
     Filtered = Table.SelectRows(Cleaned, each [Name] <> null and Text.Contains([Name], "AAH", Comparer.OrdinalIgnoreCase))
 in
-    Table.Buffer(Filtered)
+    Filtered

@@ -35,4 +35,4 @@ let
         {"INVOICE", type text}
     })
 in
-    Table.Buffer(Typed)
+    Typed

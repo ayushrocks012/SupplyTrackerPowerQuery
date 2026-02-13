@@ -80,4 +80,4 @@ let
     
     Selected = Table.SelectColumns(Typed, {"Booking ID", "Your Reference", "Collection Date", "Expected Delivery Date", "Sailing Date", "Breda Tour", "Departure", "Status", "Location", "Custom Cleared Status"})
 in
-    Table.Buffer(Selected)
+    Selected
