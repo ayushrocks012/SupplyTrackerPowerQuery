@@ -21,7 +21,7 @@ let
     
     MergedSKU = Table.NestedJoin(Combined, {"Product Code"}, SKUBible, {"ECC CODE"}, "SKUBIBLE", JoinKind.LeftOuter),
     
-    ExpandedSKU = Table.ExpandTableColumn(MergedSKU, "SKUBIBLE", {"DESCRIPTION", "SHELF LIFE", "SHIP SHELF LIFE"}, {"DESCRIPTION", "SHELF LIFE", "SHIP SHELF LIFE"}),
+    ExpandedSKU = Table.ExpandTableColumn(MergedSKU, "SKUBIBLE", {"DESCRIPTION", "SHELF LIFE", "SHIP SHELF LIFE", "ADULT/PAED", "REIMBURSED/OOP", "GROWTH DRIVER"}, {"DESCRIPTION", "SHELF LIFE", "SHIP SHELF LIFE", "ADULT/PAED", "REIMBURSED/OOP", "GROWTH DRIVER"}),
     
     // 3. Current Date Logic
     CurrentDate = Date.From(DateTime.LocalNow()),
