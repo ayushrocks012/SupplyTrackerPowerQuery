@@ -38,8 +38,7 @@ let
         {"EXP_DATE", type date}, 
         {"MFG_DATE", type date},
         {"FORWARDER", type text},
-        {"Port of Discharge", type text},
-        {"A2B.Expected Delivery Date", type date}
+        {"Port of Discharge", type text}
     })
 in
     Typed
