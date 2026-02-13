@@ -194,26 +194,5 @@ let
     WithForecastDailyAAH = Table.AddColumn(FinalClean, "AAH Forecast Daily AAH", each if [AAH Forecast 14 Days AAH] <> null then [AAH Forecast 14 Days AAH]/14 else null, type number),
     WithForecastDailyABB = Table.AddColumn(WithForecastDailyAAH, "AAH Forecast Daily ABB", each if [AAH Forecast 14 Days ABB] <> null then [AAH Forecast 14 Days ABB]/14 else null, type number),
 
-    // Final Reorder to match original output structure
-    FinalReorder = Table.ReorderColumns(WithForecastDailyABB, {
-        "AAH Warehouse Name", "AAH Warehouse Code", "AAH Product Code", "AAH Product Name", 
-        "AAH On Hand AAH", "AAH Open Orders AAH", "AAH SOQ Today AAH", "AAH SOQ Next 7 Day AAH", 
-        "AAH On Hand DOH AAH", "AAH On Hand + Open Orders DOH AAH", "AAH On Hand + Open Orders + SOQ DOH AAH", 
-        "AAH Forecast 14 Days AAH", "AAH Forecast Daily AAH", 
-        "Product-location Block Start Date", "Product-location Block End Date", "Product-location comments", 
-        "PIP code", "AAH Pack Size AAH", "AAH Purchase Price AAH", 
-        "AAH Sales Quantity Last 30 Days AAH", "AAH Sales Quantity Month -1 AAH", "AAH Sales Quantity Month -2 AAH", 
-        "AAH Lead Time AAH", "AAH Order Cycle AAH", "Abbott Factor", 
-        "AAH On Hand ABB", "AAH Open Orders ABB", "AAH SOQ Today ABB", "AAH SOQ Next 7 Day ABB", 
-        "AAH Forecast Daily ABB", "AAH Forecast 14 Days ABB", "AAH Sales Quantity Last 30 Days ABB", 
-        "AAH Sales Quantity Month -1 ABB", "AAH Sales Quantity Month -2 ABB", 
-        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
-        "LOCAL ITEM NBR", "1-6-3-3", "SHORT 1633", "ECC CODE", 
-        "GROWTH DRIVER", "GROWTH SUB-DRIVER", "SUB-BAND", "FAMILY", "SUB-FAMILY", "PRODUCT STATUS", 
-        "BPCS Units per Case", "BPCS Units per Pallet", "Standard Plt Height", "BPCS Units per Layer", 
-        "On Order Shipped Prev Day Del Date ABB", "On Order Shipped Prev Day ABB", 
-        "On Order In Progress Qty ABB", "On Order In Progress Del Date", 
-        "AUK Inv ABB"
-    })
 in
-    FinalReorder
+    WithForecastDailyABB
