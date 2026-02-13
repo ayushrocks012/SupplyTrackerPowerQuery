@@ -9,32 +9,27 @@ let
     // 1. Combine AUK and AUL
     Combined = Table.Combine({SourceAUK, SourceAUL}),
     
-    // 2. Merge with SKUBIBLE V3
-    // Original Total_Inv_Batch.m: NestedJoin(#"Changed Type", {"Product Code", "Warehouse"}, #"SKUBIBLE V3", {"ECC CODE", "PLANT CODE"}, ...)
-    // It joins on Product Code -> ECC CODE and Warehouse -> PLANT CODE.
-    // My dim_SKUBible_V3 is just the SKUBIBLE table. I assume it has ECC CODE and PLANT CODE.
-    // Error "Column ITEM NMBR not found" in my previous code was because I tried to join on "ITEM NBR". 
-    // I will correct this to join on "ECC CODE".
+    // 2. Merge with SKUBIBLE V3 — composite key {Product Code, Warehouse} → {ECC CODE, PLANT CODE}
+    MergedSKU = Table.NestedJoin(Combined, {"Product Code", "Warehouse"}, SKUBible, {"ECC CODE", "PLANT CODE"}, "SKUBIBLE", JoinKind.LeftOuter),
     
-    // Note: I am NOT joining on Warehouse/PLANT CODE for simplicity unless strictly necessary, 
-    // but the original code did. I'll stick to Product Code -> ECC CODE for now as it's the primary key.
+    // Expand all 11 legacy columns from SKUBIBLE V3
+    ExpandedSKU = Table.ExpandTableColumn(MergedSKU, "SKUBIBLE", {"DESC", "D56 ITEM NMBR", "1-6-3-3", "SHORT 1633", "SHIP SHELF LIFE", "FORM DESCRIPTION", "PACK TYPE REPORTING", "ADULT/PAED", "REIMBURSED/OOP", "FORECAST SUB-TIER", "GROWTH DRIVER"}, {"DESC", "D56 ITEM NMBR", "1-6-3-3", "SHORT 1633", "SHIP SHELF LIFE", "FORM DESCRIPTION", "PACK TYPE REPORTING", "ADULT/PAED", "REIMBURSED/OOP", "FORECAST SUB-TIER", "GROWTH DRIVER"}),
     
-    MergedSKU = Table.NestedJoin(Combined, {"Product Code"}, SKUBible, {"ECC CODE"}, "SKUBIBLE", JoinKind.LeftOuter),
+    // 3. Filter to AVAILABLE only (legacy Total_Inv_Batch.m line 6)
+    FilteredAvailable = Table.SelectRows(ExpandedSKU, each [Combined Storage Type] = "AVAILABLE"),
     
-    ExpandedSKU = Table.ExpandTableColumn(MergedSKU, "SKUBIBLE", {"DESCRIPTION", "SHELF LIFE", "SHIP SHELF LIFE", "ADULT/PAED", "REIMBURSED/OOP", "GROWTH DRIVER"}, {"DESCRIPTION", "SHELF LIFE", "SHIP SHELF LIFE", "ADULT/PAED", "REIMBURSED/OOP", "GROWTH DRIVER"}),
-    
-    // 3. Current Date Logic
+    // 4. Current Date Logic
     CurrentDate = Date.From(DateTime.LocalNow()),
     
-    // 4. Transform & Calculate
-    WithExpiry = Table.TransformColumnTypes(ExpandedSKU,{{"Expiry", type date}, {"SHELF LIFE", Int64.Type}, {"SHIP SHELF LIFE", Int64.Type}}),
+    // 5. Transform & Calculate
+    WithExpiry = Table.TransformColumnTypes(FilteredAvailable,{{"Expiry", type date}, {"SHIP SHELF LIFE", Int64.Type}}),
     
     // Days to Expiry
     WithDaysToExpiry = Table.AddColumn(WithExpiry, "Days to Expiry", each Duration.Days([Expiry] - CurrentDate), Int64.Type),
     
-    // 5. Merge with ADS
+    // 6. Merge with ADS
     MergedADS = Table.NestedJoin(WithDaysToExpiry, {"Product Code", "Warehouse"}, ADS, {"ECC CODE", "Location/Plant/Site"}, "ADS_Table", JoinKind.LeftOuter),
-    ExpandedADS = Table.ExpandTableColumn(MergedADS, "ADS_Table", {"ADS"}, {"ADS"}),
+    ExpandedADS = Table.ExpandTableColumn(MergedADS, "ADS_Table", {"CurrMonthADS"}, {"CurrMonthADS"}),
     
     // 6. Calculate Months to Sell
     // Logic: ([Days to Expiry] - [SHIP SHELF LIFE]) / 30 / [ADS] ??
@@ -51,10 +46,15 @@ let
         if [Days to Expiry] = null or [SHIP SHELF LIFE] = null then null 
         else ([Days to Expiry] - [SHIP SHELF LIFE]) / 30, type number),
     
-    // 7. Merge with OnOrder
-    MergedOnOrder = Table.NestedJoin(WithMTS, {"Product Code", "Warehouse"}, OnOrder, {"ECC CODE", "Inbound Warehouse"}, "OnOrder_Table", JoinKind.LeftOuter),
+    // Last Ship Date (legacy Total_Inv_Batch.m line 16)
+    WithLastShipDate = Table.AddColumn(WithMTS, "Last Ship Date", each 
+        if [Expiry] = null or [SHIP SHELF LIFE] = null then null 
+        else Date.AddDays([Expiry], -[SHIP SHELF LIFE]), type date),
+    
+    // 8. Merge with OnOrder
+    MergedOnOrder = Table.NestedJoin(WithLastShipDate, {"Product Code", "Warehouse"}, OnOrder, {"ECC CODE", "Inbound Warehouse"}, "OnOrder_Table", JoinKind.LeftOuter),
     ExpandedOnOrder = Table.ExpandTableColumn(MergedOnOrder, "OnOrder_Table", {"OnOrderQty"}, {"OnOrderQty"}),
     
-    FinalTyped = Table.TransformColumnTypes(ExpandedOnOrder, {{"OnOrderQty", Int64.Type}, {"ADS", type number}})
+    FinalTyped = Table.TransformColumnTypes(ExpandedOnOrder, {{"OnOrderQty", Int64.Type}, {"CurrMonthADS", type number}})
 in
     FinalTyped

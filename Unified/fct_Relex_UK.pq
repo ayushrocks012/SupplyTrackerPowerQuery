@@ -18,7 +18,7 @@ let
     BPCS_Item_Master = dim_BPCS_Item,
     Prev_Day = stg_Shipped_PrevDay,
     InProgress = stg_InProgress,
-    AUL_Inv_SKU = stg_Inv_AUK, 
+    AUL_Inv_SKU = stg_Inv_AUL, 
 
     // --- Load Main File ---
     FileContent = GetLatestFile(DemandPath, "Abbott Stock File", ".xlsx"),
@@ -170,16 +170,20 @@ let
         {"BPCS Units per Case","BPCS Units per Pallet","Standard Plt Height","BPCS Units per Layer"},
         {"BPCS Units per Case","BPCS Units per Pallet","Standard Plt Height","BPCS Units per Layer"}),
 
-    // Prev Day
-    // Note: stg_Shipped_PrevDay (Prev_Day) likely has "Town" and "Sku ID". 
-    // Join Keys: {"ECC CODE", "AAH Warehouse Name"} -> {"Sku ID", "Town"}
-    JoinPrev = Table.NestedJoin(ExpandBpcs, {"ECC CODE","AAH Warehouse Name"}, Prev_Day, {"Sku ID","Town"}, "PrevDay", JoinKind.LeftOuter),
-    // Expand: "Qty Shipped" -> "On Order Shipped Prev Day ABB", "Ship By Date" -> "On Order Shipped Prev Day Del Date ABB"
+    // Prev Day — pre-aggregate by {Sku ID, Town} before join (legacy Relex_UK.m pattern)
+    PrevDayAgg = Table.Group(Prev_Day, {"Sku ID", "Town"}, {
+        {"Ship By Date", each List.Max([Ship By Date]), type nullable date},
+        {"Qty Shipped", each List.Sum([Qty Shipped]), type nullable number}
+    }),
+    JoinPrev = Table.NestedJoin(ExpandBpcs, {"ECC CODE","AAH Warehouse Name"}, PrevDayAgg, {"Sku ID","Town"}, "PrevDay", JoinKind.LeftOuter),
     ExpandPrev = Table.ExpandTableColumn(JoinPrev, "PrevDay", {"Ship By Date","Qty Shipped"}, {"On Order Shipped Prev Day Del Date ABB","On Order Shipped Prev Day ABB"}),
 
-    // In Progress
-    JoinInProg = Table.NestedJoin(ExpandPrev, {"ECC CODE","AAH Warehouse Name"}, InProgress, {"Sku ID","Town"}, "InProg", JoinKind.LeftOuter),
-    // Expand: "Qty In Progress", "Ship By Date"
+    // In Progress — pre-aggregate by {Sku ID, Town} before join (legacy Relex_UK.m pattern)
+    InProgressAgg = Table.Group(InProgress, {"Sku ID", "Town"}, {
+        {"Qty In Progress", each List.Sum([Qty In Progress]), type nullable number},
+        {"Ship By Date", each List.Max([Ship By Date]), type nullable date}
+    }),
+    JoinInProg = Table.NestedJoin(ExpandPrev, {"ECC CODE","AAH Warehouse Name"}, InProgressAgg, {"Sku ID","Town"}, "InProg", JoinKind.LeftOuter),
     ExpandInProg = Table.ExpandTableColumn(JoinInProg, "InProg", {"Qty In Progress","Ship By Date"}, {"On Order In Progress Qty ABB","On Order In Progress Del Date"}),
 
     // AUL (using stg_Inv_AUK)

@@ -2,16 +2,16 @@ let
     // --- Dependencies ---
     Source = fct_Warehouse_Inbound,
     
+    // Select only the columns we need (matching legacy OnOrderQty.m)
+    Selected = Table.SelectColumns(Source, {"Inbound Warehouse", "Inbound Status", "ECC CODE", "Units"}),
+    
     // Filter for Current or Next Week
-    Filtered = Table.SelectRows(Source, each ([Inbound Status] = "Inbound - Current Week" or [Inbound Status] = "Inbound - Next Week")),
+    Filtered = Table.SelectRows(Selected, each ([Inbound Status] = "Inbound - Current Week" or [Inbound Status] = "Inbound - Next Week")),
     
-    // Group by Warehouse and Item (ECC CODE)
-    // Note: "1633 Item Code" in UK Departures maps to "ECC CODE"? 
-    // Usually "1633 Item Code" is the material number.
-    // I will rename it to "ECC CODE" for consistency with other queries.
+    // Remove Inbound Status before grouping (matching legacy)
+    Removed = Table.RemoveColumns(Filtered, {"Inbound Status"}),
     
-    Renamed = Table.RenameColumns(Filtered, {{"1633 Item Code", "ECC CODE"}}),
-    
-    Grouped = Table.Group(Renamed, {"Inbound Warehouse", "ECC CODE"}, {{"OnOrderQty", each List.Sum([Units]), type nullable number}})
+    // Group by Warehouse and ECC CODE
+    Grouped = Table.Group(Removed, {"Inbound Warehouse", "ECC CODE"}, {{"OnOrderQty", each List.Sum([Units]), type nullable number}})
 in
     Grouped
