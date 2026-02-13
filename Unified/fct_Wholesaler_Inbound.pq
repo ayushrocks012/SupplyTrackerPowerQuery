@@ -47,7 +47,7 @@ let
                     (Date.Year(expectedDate) - Date.Year(CurrentDate)) * 52 + 
                     (Date.WeekOfYear(expectedDate) - Date.WeekOfYear(CurrentDate))
         in
-            if weekDiff = null then "Future" 
+            if weekDiff = null then null
             else if weekDiff = -1 then "Inbound - Last Week"
             else if weekDiff = 0 then "Inbound - Current Week"
             else if weekDiff = 1 then "Inbound - Next Week"
