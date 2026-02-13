@@ -24,15 +24,16 @@ let
 
     Promoted = Table.PromoteHeaders(Data_Sheet, [PromoteAllScalars=true]),
     
-    // Select useful columns
-    Selected = Table.SelectColumns(Promoted, {"Booking Reference", "Carrier", "Status", "Delivery Date", "Collection Date"}),
+    // FIX: Match original AUK_Completed_Bookings.m logic (Remove specific columns, keep rest)
+    // Original Removed: "Pallet Qty", "Pallets Delivered", "Schedule Dstamp", "Schedule Duration", "Arrival", "Onsite", "Onsite Duration"
+    // This avoids "Column not found" errors for columns I assumed existed (like "Delivery Date").
     
-    Typed = Table.TransformColumnTypes(Selected,{
+    Removed = Table.RemoveColumns(Promoted, {"Pallet Qty", "Pallets Delivered", "Schedule Dstamp", "Schedule Duration", "Arrival", "Onsite", "Onsite Duration"}, MissingField.Ignore),
+    
+    Typed = Table.TransformColumnTypes(Removed,{
         {"Booking Reference", type text}, 
         {"Carrier", type text}, 
-        {"Status", type text},
-        {"Delivery Date", type date},
-        {"Collection Date", type date}
+        {"Status", type text}
     })
 in
     Typed

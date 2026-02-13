@@ -1,7 +1,6 @@
 let
     // --- Dependencies (Hardcoded) ---
     Source = SharePoint.Contents("https://abbott.sharepoint.com/sites/GB-AN-HeadOffice", [ApiVersion = 15]),
-    // Path: General > Demand > Master Data Files > Daily Tracker Files UK Departures PBI
     DemandPath = Source{[Name="Shared Documents"]}[Content]{[Name="General"]}[Content]{[Name="Demand"]}[Content]{[Name="Master Data Files"]}[Content]{[Name="Daily Tracker Files UK Departures PBI"]}[Content],
     
     // --- Helper Logic (Inlined) ---
@@ -16,16 +15,18 @@ let
     FileContent = GetLatestFile(DemandPath, "UK Departures", ".xlsx"),
     Excel = Excel.Workbook(FileContent, null, true),
     
-    // Sheet Name: "Warehouse"
     Sheet = try Excel{[Item="Warehouse", Kind="Sheet"]}[Data] 
             otherwise Excel{[Name="Warehouse"]}[Data],
             
-    Promoted = Table.PromoteHeaders(Sheet, [PromoteAllScalars=true]),
+    // FIX: Skip 1 row before promoting headers (matching PBI Warehouse.m)
+    Skipped = Table.Skip(Sheet, 1),
+    
+    Promoted = Table.PromoteHeaders(Skipped, [PromoteAllScalars=true]),
     
     // Clean Empty Rows
     Cleaned = Table.SelectRows(Promoted, each not List.IsEmpty(List.RemoveMatchingItems(Record.FieldValues(_), {"", null}))),
     
-    // Type Transformation (Based on PBI Warehouse.m inspection)
+    // Type Transformation
     Typed = Table.TransformColumnTypes(Cleaned,{
         {"ETD", type date}, 
         {"DEPARTURE", Int64.Type}, 
@@ -36,7 +37,6 @@ let
         {"Breda Status Date", type date}, 
         {"EXP_DATE", type date}, 
         {"MFG_DATE", type date}
-        // Add other columns if needed
     })
 in
     Typed
