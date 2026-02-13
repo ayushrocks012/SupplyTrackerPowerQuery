@@ -112,23 +112,26 @@ let
     WeekHeaders = {"Monday","Tuesday","Wednesday","Thursday","Friday"},
     ShiftWeekendToMonday = true,
 
-    // Logic implementation
-    AddWeekPlan = Table.AddColumn(WithABB8, "WeekPlan", each 
+    // Define Helper Function (Robust field access)
+    WeekPlanFromRow = (row as record) as record =>
         let
-            LT = [AAH Lead Time AAH],
-            Orders = {[#"[SL] Order (Mon)"], [#"[SL] Order (Tue)"], [#"[SL] Order (Wed)"], [#"[SL] Order (Thu)"], [#"[SL] Order (Fri)"] },
-            // Indices where Order = 1. (0=Mon, 4=Fri)
+            LT_raw = Record.FieldOrDefault(row, "AAH Lead Time AAH", null),
+            LT = try Number.From(LT_raw) otherwise null,
+            
+            // Loop over field names safely
+            Orders = List.Transform(
+                OrderFieldNames, 
+                (f) => 
+                    let x = Record.FieldOrDefault(row, f, 0)
+                    in if x = null then 0 else Number.From(x)
+            ),
+            
             OrderIdx = List.PositionOf(Orders, 1, Occurrence.All),
-            
-            // Deliver Index = (OrderIdx + LT) Mod 7
             DeliverIdx7 = if LT = null then {} else List.Transform(OrderIdx, each Number.Mod(_ + LT, 7)),
-            
-            // Shift Weekend (5=Sat, 6=Sun) to 0 (Mon) if enabled
             DeliverIdx = if ShiftWeekendToMonday 
                          then List.Transform(DeliverIdx7, each if _ = 5 or _ = 6 then 0 else _) 
                          else DeliverIdx7,
             
-            // Generate List of "Order", "Deliver", etc for 0..4 (Mon..Fri)
             DayValues = List.Transform({0..4}, (d) => 
                 let 
                     isOrder = List.Contains(OrderIdx, d),
@@ -139,12 +142,12 @@ let
                     else if isDeliver then "Deliver"
                     else null
             ),
-            
             Rec = Record.FromList(DayValues, WeekHeaders)
         in
-            Rec
-    ),
-    
+            Rec,
+
+    // Apply Function
+    AddWeekPlan = Table.AddColumn(WithABB8, "WeekPlan", each WeekPlanFromRow(_), type record),
     WithWeekdays = Table.ExpandRecordColumn(AddWeekPlan, "WeekPlan", WeekHeaders, WeekHeaders),
 
     // 7. Joins
