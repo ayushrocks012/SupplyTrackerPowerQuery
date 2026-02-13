@@ -94,18 +94,25 @@ let
     ExpandVal = Table.ExpandTableColumn(JoinVal, "Val", {"Abbott Factor"}, {"Abbott Factor"}),
     AddAbbFactorN = Table.AddColumn(ExpandVal, "Abbott Factor N", each try Number.From([Abbott Factor]) otherwise null, type number),
 
-    // 5. Apply Abbott Factor (Explicitly adding all columns)
-    // Helper function to multiply safely
-    Multiply = (val, factor) => if factor = null or val = null then null else val * factor,
+    // 5. Apply Abbott Factor (Safe Helper Function)
+    ApplyFactor = (table, sourceCol, destCol, resultType) => 
+        Table.AddColumn(table, destCol, each 
+            let 
+                val = Record.Field(_, sourceCol),
+                factor = [Abbott Factor N]
+            in 
+                if val = null or factor = null then null else val * factor,
+            resultType
+        ),
 
-    WithABB = Table.AddColumn(AddAbbFactorN, "AAH On Hand ABB", each Multiply([AAH On Hand AAH], [Abbott Factor N]), Int64.Type),
-    WithABB2 = Table.AddColumn(WithABB, "AAH Open Orders ABB", each Multiply([AAH Open Orders AAH], [Abbott Factor N]), Int64.Type),
-    WithABB3 = Table.AddColumn(WithABB2, "AAH SOQ Today ABB", each Multiply([AAH SOQ Today AAH], [Abbott Factor N]), Int64.Type),
-    WithABB4 = Table.AddColumn(WithABB3, "AAH SOQ Next 7 Day ABB", each Multiply([AAH SOQ Next 7 Day AAH], [Abbott Factor N]), Int64.Type),
-    WithABB5 = Table.AddColumn(WithABB4, "AAH Forecast 14 Days ABB", each Multiply([AAH Forecast 14 Days AAH], [Abbott Factor N]), type number),
-    WithABB6 = Table.AddColumn(WithABB5, "AAH Sales Quantity Last 30 Days ABB", each Multiply([AAH Sales Quantity Last 30 Days AAH], [Abbott Factor N]), Int64.Type),
-    WithABB7 = Table.AddColumn(WithABB6, "AAH Sales Quantity Month -1 ABB", each Multiply([AAH Sales Quantity Month -1 AAH], [Abbott Factor N]), Int64.Type),
-    WithABB8 = Table.AddColumn(WithABB7, "AAH Sales Quantity Month -2 ABB", each Multiply([AAH Sales Quantity Month -2 AAH], [Abbott Factor N]), Int64.Type),
+    WithABB  = ApplyFactor(AddAbbFactorN, "AAH On Hand AAH",                     "AAH On Hand ABB",                     Int64.Type),
+    WithABB2 = ApplyFactor(WithABB,       "AAH Open Orders AAH",                 "AAH Open Orders ABB",                 Int64.Type),
+    WithABB3 = ApplyFactor(WithABB2,      "AAH SOQ Today AAH",                   "AAH SOQ Today ABB",                   Int64.Type),
+    WithABB4 = ApplyFactor(WithABB3,      "AAH SOQ Next 7 Day AAH",              "AAH SOQ Next 7 Day ABB",              Int64.Type),
+    WithABB5 = ApplyFactor(WithABB4,      "AAH Forecast 14 Days AAH",            "AAH Forecast 14 Days ABB",            type number),
+    WithABB6 = ApplyFactor(WithABB5,      "AAH Sales Quantity Last 30 Days AAH", "AAH Sales Quantity Last 30 Days ABB", Int64.Type),
+    WithABB7 = ApplyFactor(WithABB6,      "AAH Sales Quantity Month -1 AAH",     "AAH Sales Quantity Month -1 ABB",     Int64.Type),
+    WithABB8 = ApplyFactor(WithABB7,      "AAH Sales Quantity Month -2 AAH",     "AAH Sales Quantity Month -2 ABB",     Int64.Type),
 
     // 6. Weekday Plan Calculation
     OrderFieldNames = {"[SL] Order (Mon)","[SL] Order (Tue)","[SL] Order (Wed)","[SL] Order (Thu)","[SL] Order (Fri)"},
