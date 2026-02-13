@@ -3,6 +3,7 @@ let
     File = Demand{[Name="SKU Bible V2.xlsx"]}[Content],
     Workbook = Excel.Workbook(File, null, true),
     Table = Workbook{[Item="SKUBIBLE", Kind="Table"]}[Data],
-    Filtered = Table.SelectRows(Table, each [AFFILIATE] = "UNITED KINGDOM")
+    Filtered = Table.SelectRows(Table, each [AFFILIATE] = "UNITED KINGDOM"),
+    Typed = Table.TransformColumnTypes(Filtered, {{"ECC CODE", type text}})
 in
-    Table.Buffer(Filtered)
+    Table.Buffer(Typed)

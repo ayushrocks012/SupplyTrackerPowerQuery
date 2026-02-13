@@ -21,8 +21,8 @@ let
     MergedA2B = Table.NestedJoin(FilteredETD, {"Breda Tour", "DEPARTURE"}, A2B, {"Breda Tour", "Departure"}, "A2B_Table", JoinKind.LeftOuter),
     
     ExpandedA2B = Table.ExpandTableColumn(MergedA2B, "A2B_Table", 
-        {"Collection Date", "Expected Delivery Date", "Sailing Date", "Breda Tour", "Departure", "Status", "Location", "Custom Cleared Status"}, 
-        {"A2B.Collection Date", "A2B.Expected Delivery Date", "A2B.Sailing Date", "A2B.Breda Tour", "A2B.Departure", "A2B.Status", "A2B.Location", "A2B.Custom Cleared Status"}),
+        {"Collection Date", "Expected Delivery Date", "Breda Tour", "Departure", "Status", "Location", "Custom Cleared Status"}, 
+        {"A2B.Collection Date", "A2B.Expected Delivery Date", "A2B.Breda Tour", "A2B.Departure", "A2B.Status", "A2B.Location", "A2B.Custom Cleared Status"}),
 
     // --- 3. Inbound Warehouse Logic (from PBI Warehouse.m) ---
     // Legacy: "075-" & [TO] — user confirmed [TO] column exists in UK Departures Excel
@@ -31,16 +31,12 @@ let
     // --- 4. Inbound Status Calculation (Specific to Warehouse) ---
     WithStatus = Table.AddColumn(WithWarehouse, "Inbound Status", each 
         let
-            // Robust access
-            expectedDD = [#"A2B.Expected Delivery Date"],
-            etdDate = [ETD],
-            forwarder = if [FORWARDER] = null then "" else Text.Upper(Text.Trim([FORWARDER])),
+            // C-01 FIX: Defensive coercions matching legacy PBI Warehouse.m
+            expectedDD = try Date.From([#"A2B.Expected Delivery Date"]) otherwise null,
+            etdDate = try Date.From([ETD]) otherwise null,
+            forwarder = Text.Upper(Text.Trim(try Text.From([FORWARDER]) otherwise "")),
 
-            // Logic from PBI Warehouse.m (Snippet 729)
-            // if expectedDD = null then
-            //    if forwarder = "NOUWENS" and etdDate <> null then Date.AddDays(etdDate, 1) else null
-            // else expectedDD
-            
+            // Effective delivery date
             deliveryDate = 
                 if expectedDD = null then 
                     if forwarder = "NOUWENS" and etdDate <> null then Date.AddDays(etdDate, 1) 
@@ -79,8 +75,8 @@ let
     Selected = Table.SelectColumns(ExpandedSKU, {
         "Inbound Warehouse", "Inbound Status", "ECC CODE", 
         "1633 Item Code", "Units", "ETD", "DEPARTURE", 
-        "GIT Value (£,£)", "Year (Current)", "Month (Current)",
-        "A2B.Collection Date", "A2B.Expected Delivery Date", "A2B.Sailing Date",
+        "GIT Value (€)", "Year (Current)", "Month (Current)",
+        "A2B.Collection Date", "A2B.Expected Delivery Date",
         "A2B.Breda Tour", "A2B.Departure", "A2B.Status", "A2B.Location", "A2B.Custom Cleared Status"
     }, MissingField.Ignore)
 in

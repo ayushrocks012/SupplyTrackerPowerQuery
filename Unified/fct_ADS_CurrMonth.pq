@@ -12,6 +12,6 @@ let
     Filtered = Table.SelectRows(Pruned, each Date.Month([RowDate]) = CurrentMonth and Date.Year([RowDate]) = CurrentYear),
     
     // Original Logic: Group by ECC CODE, Site, and RowDate (day grain), then Sum [Data].
-    Grouped = Table.Group(Filtered, {"ECC CODE", "Location/Plant/Site", "RowDate"}, {{"CurrMonthADS", each List.Sum([Data]), type nullable number}})
+    Grouped = Table.Group(Filtered, {"ECC CODE", "Location/Plant/Site"}, {{"CurrMonthADS", each List.Sum([Data]), type nullable number}})
 in
     Grouped

@@ -7,7 +7,7 @@ let
     
     CombinedStorage = Table.AddColumn(NetInv, "Combined Storage Type", each 
         if [Storage Type] = "014" or [Storage Type] = "011" then "AVAILABLE" 
-        else if [Storage Type] = "802" then "RECEIPT" 
+        else if [Storage Type] = "802" then "AVAILABLE" 
         else if [Storage Type] = "916" then "ALLOCATED" 
         else if [Storage Type] = "999" then "SCHROTT"
         else "NEW STORAGE TYPE TO BE DECIDED"

@@ -55,6 +55,13 @@ let
     MergedOnOrder = Table.NestedJoin(WithLastShipDate, {"Product Code", "Warehouse"}, OnOrder, {"ECC CODE", "Inbound Warehouse"}, "OnOrder_Table", JoinKind.LeftOuter),
     ExpandedOnOrder = Table.ExpandTableColumn(MergedOnOrder, "OnOrder_Table", {"OnOrderQty"}, {"OnOrderQty"}),
     
-    FinalTyped = Table.TransformColumnTypes(ExpandedOnOrder, {{"Expiry", type date}, {"SHIP SHELF LIFE", Int64.Type}, {"OnOrderQty", Int64.Type}, {"CurrMonthADS", type number}})
+    FinalTyped = Table.TransformColumnTypes(ExpandedOnOrder, {{"Expiry", type date}, {"SHIP SHELF LIFE", Int64.Type}, {"OnOrderQty", Int64.Type}, {"CurrMonthADS", type number}}),
+    
+    // C-02 FIX: Match legacy Total_Inv_Batch.m Sort → Index → RemoveColumns
+    Sorted = Table.Sort(FinalTyped, {{"Expiry", Order.Ascending}, {"FORECAST SUB-TIER", Order.Ascending}}),
+    Indexed = Table.AddIndexColumn(Sorted, "Index", 1, 1, Int64.Type),
+    
+    // Remove columns that legacy explicitly dropped
+    Cleaned = Table.RemoveColumns(Indexed, {"Combined Storage Type", "Combined Storage Bin", "D56 ITEM NMBR", "1-6-3-3", "SHORT 1633", "SHIP SHELF LIFE", "Days to Expiry"}, MissingField.Ignore)
 in
-    FinalTyped
+    Cleaned
