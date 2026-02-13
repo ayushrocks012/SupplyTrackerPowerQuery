@@ -1,7 +1,6 @@
 let
-    // --- Dependencies ---
-    Source = SharePoint.Contents("https://abbott.sharepoint.com/sites/GB-AN-HeadOffice", [ApiVersion = 15]),
-    DemandPath = Source{[Name="Shared Documents"]}[Content]{[Name="General"]}[Content]{[Name="Demand"]}[Content]{[Name="Master Data Files"]}[Content]{[Name="Daily Tracker Files - Wholesaler"]}[Content],
+    // --- Dependencies (Shared Base) ---
+    DemandPath = fn_SharePointBase[Wholesaler],
 
     // --- Helper Logic (Inlined) ---
     GetLatestFile = (Folder as table, StartsWith as text, EndsWith as text) =>
@@ -87,32 +86,45 @@ let
         {"AAH Lead Time AAH", Int64.Type}, {"AAH Order Cycle AAH", type any}
     }),
 
-    // 4. Merge ValidationFactor
-    Validation_slim = Table.SelectColumns(ValidationFactor, {"AAH Packsize","Abbott Factor"}, MissingField.Ignore),
-    // Using Buffer if needed, but standard Table should suffice for now.
-    JoinVal = Table.NestedJoin(Typed, {"AAH Pack Size AAH"}, Validation_slim, {"AAH Packsize"}, "Val", JoinKind.LeftOuter),
-    ExpandVal = Table.ExpandTableColumn(JoinVal, "Val", {"Abbott Factor"}, {"Abbott Factor"}),
-    AddAbbFactorN = Table.AddColumn(ExpandVal, "Abbott Factor N", each try Number.From([Abbott Factor]) otherwise null, type number),
+    // 4. Record-based lookup for ValidationFactor (faster than NestedJoin for small tables)
+    ValRecord = Record.FromTable(Table.RenameColumns(
+        Table.SelectColumns(Table.Buffer(ValidationFactor), {"AAH Packsize", "Abbott Factor"}, MissingField.Ignore),
+        {{"AAH Packsize", "Name"}, {"Abbott Factor", "Value"}}
+    )),
 
-    // 5. Apply Abbott Factor (Safe Helper Function)
-    ApplyFactor = (table, sourceCol, destCol, resultType) => 
-        Table.AddColumn(table, destCol, each 
-            let 
-                val = Record.Field(_, sourceCol),
-                factor = [Abbott Factor N]
-            in 
-                if val = null or factor = null then null else val * factor,
-            resultType
-        ),
+    // 5. Single-pass Abbott Factor calculation (replaces 8 chained Table.AddColumn calls)
+    FactorPairs = {
+        {"AAH On Hand AAH",                     "AAH On Hand ABB"},
+        {"AAH Open Orders AAH",                 "AAH Open Orders ABB"},
+        {"AAH SOQ Today AAH",                   "AAH SOQ Today ABB"},
+        {"AAH SOQ Next 7 Day AAH",              "AAH SOQ Next 7 Day ABB"},
+        {"AAH Forecast 14 Days AAH",            "AAH Forecast 14 Days ABB"},
+        {"AAH Sales Quantity Last 30 Days AAH",  "AAH Sales Quantity Last 30 Days ABB"},
+        {"AAH Sales Quantity Month -1 AAH",      "AAH Sales Quantity Month -1 ABB"},
+        {"AAH Sales Quantity Month -2 AAH",      "AAH Sales Quantity Month -2 ABB"}
+    },
 
-    WithABB  = ApplyFactor(AddAbbFactorN, "AAH On Hand AAH",                     "AAH On Hand ABB",                     Int64.Type),
-    WithABB2 = ApplyFactor(WithABB,       "AAH Open Orders AAH",                 "AAH Open Orders ABB",                 Int64.Type),
-    WithABB3 = ApplyFactor(WithABB2,      "AAH SOQ Today AAH",                   "AAH SOQ Today ABB",                   Int64.Type),
-    WithABB4 = ApplyFactor(WithABB3,      "AAH SOQ Next 7 Day AAH",              "AAH SOQ Next 7 Day ABB",              Int64.Type),
-    WithABB5 = ApplyFactor(WithABB4,      "AAH Forecast 14 Days AAH",            "AAH Forecast 14 Days ABB",            type number),
-    WithABB6 = ApplyFactor(WithABB5,      "AAH Sales Quantity Last 30 Days AAH", "AAH Sales Quantity Last 30 Days ABB", Int64.Type),
-    WithABB7 = ApplyFactor(WithABB6,      "AAH Sales Quantity Month -1 AAH",     "AAH Sales Quantity Month -1 ABB",     Int64.Type),
-    WithABB8 = ApplyFactor(WithABB7,      "AAH Sales Quantity Month -2 AAH",     "AAH Sales Quantity Month -2 ABB",     Int64.Type),
+    WithAllABB = Table.FromRecords(
+        Table.TransformRows(Typed, (row) =>
+            let
+                packSize = Record.FieldOrDefault(row, "AAH Pack Size AAH", null),
+                abbottFactorRaw = Record.FieldOrDefault(ValRecord, packSize, null),
+                factor = try Number.From(abbottFactorRaw) otherwise null,
+                newFields = List.Transform(FactorPairs, (pair) =>
+                    let src = Record.FieldOrDefault(row, pair{0}, null)
+                    in {pair{1}, if src = null or factor = null then null else src * factor}
+                )
+            in
+                Record.Combine({
+                    row, 
+                    [Abbott Factor = abbottFactorRaw, #"Abbott Factor N" = factor],
+                    Record.FromList(
+                        List.Transform(newFields, each _{1}),
+                        List.Transform(newFields, each _{0})
+                    )
+                })
+        )
+    ),
 
     // 6. Weekday Plan Calculation
     OrderFieldNames = {"[SL] Order (Mon)","[SL] Order (Tue)","[SL] Order (Wed)","[SL] Order (Thu)","[SL] Order (Fri)"},
@@ -154,7 +166,7 @@ let
             Rec,
 
     // Apply Function
-    AddWeekPlan = Table.AddColumn(WithABB8, "WeekPlan", each WeekPlanFromRow(_), type record),
+    AddWeekPlan = Table.AddColumn(WithAllABB, "WeekPlan", each WeekPlanFromRow(_), type record),
     WithWeekdays = Table.ExpandRecordColumn(AddWeekPlan, "WeekPlan", WeekHeaders, WeekHeaders),
 
     // 7. Joins

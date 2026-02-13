@@ -1,7 +1,6 @@
 let
-    // --- Dependencies (Hardcoded) ---
-    Source = SharePoint.Contents("https://abbott.sharepoint.com/sites/GB-AN-HeadOffice", [ApiVersion = 15]),
-    DemandPath = Source{[Name="Shared Documents"]}[Content]{[Name="General"]}[Content]{[Name="Demand"]}[Content]{[Name="Master Data Files"]}[Content]{[Name="Daily Tracker Files - Wholesaler"]}[Content],
+    // --- Dependencies (Shared Base) ---
+    DemandPath = fn_SharePointBase[Wholesaler],
     
     // --- Helper Logic (Inlined) ---
     GetLatestFile = (Folder as table, StartsWith as text, EndsWith as text) =>

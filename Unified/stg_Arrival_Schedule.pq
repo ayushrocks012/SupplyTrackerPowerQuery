@@ -1,7 +1,6 @@
 let
-    // --- Dependencies (Hardcoded) ---
-    Source = SharePoint.Contents("https://abbott.sharepoint.com/sites/GB-AN-HeadOffice", [ApiVersion = 15]),
-    DemandPath = Source{[Name="Shared Documents"]}[Content]{[Name="General"]}[Content]{[Name="Demand"]}[Content]{[Name="Master Data Files"]}[Content]{[Name="Daily Tracker - Master Arrival Schedule"]}[Content],
+    // --- Dependencies (Shared Base) ---
+    DemandPath = fn_SharePointBase[ArrivalSchedule],
     
     // Original code hardcoded filename "Master Arrival Schedule PBI.xlsx"
     File = DemandPath{[Name="Master Arrival Schedule PBI.xlsx"]}[Content],
