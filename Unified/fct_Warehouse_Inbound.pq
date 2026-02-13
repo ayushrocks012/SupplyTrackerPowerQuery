@@ -74,12 +74,9 @@ let
     MergedSKU = Table.NestedJoin(WithMonth, {"1633 Item Code"}, SKUBIBLE, {"SHORT 1633"}, "SKUBIBLE", JoinKind.LeftOuter),
     ExpandedSKU = Table.ExpandTableColumn(MergedSKU, "SKUBIBLE", {"ECC CODE"}, {"ECC CODE"}),
     
-    // --- 7. Final Select/Sort ---
-    // Snippet 713: Sort by DEPARTURE Descending
-    Sorted = Table.Sort(ExpandedSKU, {{"DEPARTURE", Order.Descending}}),
-    
-    // Explicit Selection based on legacy PBI Warehouse.m output
-    Selected = Table.SelectColumns(Sorted, {
+    // --- 7. Final Select ---
+    // Sort removed (Power BI sorts in the visual layer)
+    Selected = Table.SelectColumns(ExpandedSKU, {
         "Inbound Warehouse", "Inbound Status", "ECC CODE", 
         "1633 Item Code", "Units", "ETD", "DEPARTURE", 
         "GIT Value (£,£)", "Year (Current)", "Month (Current)",

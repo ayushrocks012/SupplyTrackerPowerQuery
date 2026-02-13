@@ -2,16 +2,7 @@ let
     // --- Dependencies (Shared Base) ---
     DemandPath = fn_SharePointBase[DailyTracker],
     
-    // --- Helper Logic (Inlined) ---
-    GetLatestFile = (Folder as table, StartsWith as text, EndsWith as text) =>
-        let
-            Filtered = Table.SelectRows(Folder, each Text.StartsWith([Name], StartsWith) and Text.EndsWith([Name], EndsWith)),
-            Sorted = Table.Sort(Filtered, {{"Date modified", Order.Descending}}),
-            Latest = Table.First(Sorted)[Content]
-        in
-            Latest,
-
-    FileContent = GetLatestFile(DemandPath, "Inventory Batch", ".xls"), // Source: "Inventory Batch..."
+    FileContent = fn_GetLatestFile(DemandPath, "Inventory Batch", ".xls"), // Source: "Inventory Batch..."
     Excel = Excel.Workbook(FileContent, null, true),
     Data_Record = 
         try Excel{[Item = "Data", Kind = "Sheet"]} 
@@ -20,45 +11,52 @@ let
     Data_Sheet = Data_Record[Data],
     
     Promoted = Table.PromoteHeaders(Data_Sheet, [PromoteAllScalars=true]),
-    Typed = Table.TransformColumnTypes(Promoted, {{"Expiry", type date}, {"Qty", Int64.Type}, {"Qty Alloc", Int64.Type}}),
-    WithWarehouse = Table.AddColumn(Typed, "Warehouse", each "075-UL"),
+    // #8: Schema pruning — select only needed columns
+    SelectedCols = Table.SelectColumns(Promoted, {"Product Code", "Batch", "Expiry", "Lock Code", "Zone", "Qty", "Qty Alloc"}, MissingField.Ignore),
+    Typed = Table.TransformColumnTypes(SelectedCols, {{"Expiry", type date}, {"Qty", Int64.Type}, {"Qty Alloc", Int64.Type}}),
 
-    // Storage Type Logic (AUL Specific)
-    WithStorageType = Table.AddColumn(WithWarehouse, "Combined Storage Type", each
-             if [Lock Code] = "" and [Zone] = "DESPATCH" then "ALLOCATED" 
-        else if [Lock Code] = "" and [Zone] = "Goodsin" then "RECEIPT" 
-        else if [Lock Code] = "BLOCKED" and Text.Contains([Zone], "RESCOPK") then "RESERVED FOR COPACK" 
-        else if [Lock Code] = "" then "AVAILABLE" 
-        else if [Lock Code] = "SHORTDATE" 
-             or [Lock Code] = "DMGD" 
-             or [Lock Code] = "BLOCKED" 
-             or [Lock Code] = "QCHOLD" 
-             or [Lock Code] = "EXPD" 
-             or [Lock Code] = "SCRAP" then "SCHROTT"  
-        else "NEW LOCK CODE TO BE ADDED"
-    ),
-    
-    // Storage Bin Logic (AUL Specific)
-    WithStorageBin = Table.AddColumn(WithStorageType, "Combined Storage Bin", each
-             if [Combined Storage Type] = "AVAILABLE"  then "AVAILABLE" 
-        else if [Combined Storage Type] = "RECEIPT"    then "AVAILABLE" 
-        else if [Combined Storage Type] = "ALLOCATED"  then "ALLOCATED" 
-        else if [Combined Storage Type] = "SCHROTT" and [Lock Code] = "SHORTDATE" then "SHORTDATE" 
-        else if [Combined Storage Type] = "SCHROTT" and [Lock Code] = "DMGD"      then "DAMAGED" 
-        else if [Combined Storage Type] = "SCHROTT" and [Lock Code] = "QCHOLD"    then "QA BLOCKED" 
-        else if [Combined Storage Type] = "SCHROTT" and [Lock Code] = "BLOCKED"   then "RETURN BLOCKED" 
-        else if [Combined Storage Type] = "SCHROTT" and [Lock Code] = "EXPD"      then "EXPIRED" 
-        else if [Combined Storage Type] = "SCHROTT" and [Lock Code] = "SCRAP"     then "SCRAP" 
-        else "NEW LOCK CODE TO BE ADDED"
+    // #4: Single-pass enrichment (replaces 4 chained Table.AddColumn)
+    Enriched = Table.FromRecords(
+        Table.TransformRows(Typed, (row) =>
+            let
+                lockCode = row[Lock Code],
+                zone = row[Zone],
+                qty = row[Qty],
+                qtyAlloc = row[Qty Alloc],
+
+                storageType =
+                    if lockCode = "" and zone = "DESPATCH" then "ALLOCATED"
+                    else if lockCode = "" and zone = "Goodsin" then "RECEIPT"
+                    else if lockCode = "BLOCKED" and Text.Contains(zone, "RESCOPK") then "RESERVED FOR COPACK"
+                    else if lockCode = "" then "AVAILABLE"
+                    else if lockCode = "SHORTDATE" or lockCode = "DMGD" or lockCode = "BLOCKED"
+                         or lockCode = "QCHOLD" or lockCode = "EXPD" or lockCode = "SCRAP" then "SCHROTT"
+                    else "NEW LOCK CODE TO BE ADDED",
+
+                storageBin =
+                    if storageType = "AVAILABLE" then "AVAILABLE"
+                    else if storageType = "RECEIPT" then "AVAILABLE"
+                    else if storageType = "ALLOCATED" then "ALLOCATED"
+                    else if storageType = "SCHROTT" and lockCode = "SHORTDATE" then "SHORTDATE"
+                    else if storageType = "SCHROTT" and lockCode = "DMGD" then "DAMAGED"
+                    else if storageType = "SCHROTT" and lockCode = "QCHOLD" then "QA BLOCKED"
+                    else if storageType = "SCHROTT" and lockCode = "BLOCKED" then "RETURN BLOCKED"
+                    else if storageType = "SCHROTT" and lockCode = "EXPD" then "EXPIRED"
+                    else if storageType = "SCHROTT" and lockCode = "SCRAP" then "SCRAP"
+                    else "NEW LOCK CODE TO BE ADDED",
+
+                netInv = if qty < 0 then 0 else qty - qtyAlloc
+            in
+                Record.Combine({row, [
+                    Warehouse = "075-UL",
+                    #"Combined Storage Type" = storageType,
+                    #"Combined Storage Bin" = storageBin,
+                    #"Net Inventory" = netInv
+                ]})
+        )
     ),
 
-    WithNetInv = Table.AddColumn(WithStorageBin, "Net Inventory", each if [Qty] < 0 then 0 else [Qty] - [Qty Alloc]),
-    
-    // FIX: Do NOT rename "Client Product Code". Use existing "Product Code".
-    // Original query removed "Client Product Code" and grouped by "Product Code".
-    // This implies "Product Code" already exists in the file.
-    
     // Original AUL_Inv_Batch logic grouped by these columns to sum Net Inventory
-    Grouped = Table.Group(WithNetInv, {"Product Code", "Batch", "Expiry", "Warehouse", "Combined Storage Type", "Combined Storage Bin"}, {{"NET INVENTORY", each List.Sum([Net Inventory]), type nullable number}})
+    Grouped = Table.Group(Enriched, {"Product Code", "Batch", "Expiry", "Warehouse", "Combined Storage Type", "Combined Storage Bin"}, {{"NET INVENTORY", each List.Sum([Net Inventory]), type nullable number}})
 in
     Grouped

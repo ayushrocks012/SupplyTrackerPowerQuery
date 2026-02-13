@@ -1,21 +1,6 @@
 let
     // --- Dependencies (Shared Base) ---
-    DemandPath = fn_SharePointBase[DailyTracker],
-    
-    // --- Helper Logic (Inlined) ---
-    GetLatestFile = (Folder as table, StartsWith as text, EndsWith as text) =>
-        let
-            Filtered = Table.SelectRows(Folder, each Text.StartsWith([Name], StartsWith) and Text.EndsWith(Text.Lower([Name]), EndsWith)),
-            Sorted = Table.Sort(Filtered, {{"Date modified", Order.Descending}}),
-            Latest = Table.First(Sorted)[Content]
-        in
-            Latest,
-
-    FileContent = GetLatestFile(DemandPath, "LX02", ".xlsx"),
-    Excel = Excel.Workbook(FileContent, null, true),
-    Sheet = try Excel{[Item="Sheet1"]} otherwise Excel{[Name="Sheet1"]}, 
-    Data = Sheet[Data],
-    Promoted = Table.PromoteHeaders(Data, [PromoteAllScalars=true]),
+    Promoted = base_LX02_Raw,
     Renamed = Table.RenameColumns(Promoted, {{"Material", "Product Code"}, {"Batch", "Batch ID"}, {"Available stock", "Stock"}, {"Pick quantity", "Pick Qty"}, {"SLED/BBD", "Expiry"}}),
     WithWarehouse = Table.AddColumn(Renamed, "Warehouse", each "075-UK"),
     NetInv = Table.AddColumn(WithWarehouse, "Net Inventory", each [Stock] + [Pick Qty]),

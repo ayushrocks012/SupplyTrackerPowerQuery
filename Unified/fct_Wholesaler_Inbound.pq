@@ -20,29 +20,21 @@ let
     ExpandedA2B = Table.ExpandTableColumn(MergedA2B, "A2B_Table", 
         {"Expected Delivery Date"}, 
         {"A2B.Expected Delivery Date"}),
-
     // --- 3. Inbound Status Calculation ---
     WithStatus = Table.AddColumn(ExpandedA2B, "Inbound Status", each 
         let
             fwd = [FORWARDER],
             etd = [ETD],
             a2b_exp = [#"A2B.Expected Delivery Date"],
-            
-            // Expected Date Logic
             expectedDate = 
                 if fwd = "ESSERS" then 
                     if etd = null then null else Date.AddDays(etd, 5)
-                else if fwd = "A2B" then 
-                    a2b_exp
-                else 
-                    null,
-            
-            // Week Diff Calculation
+                else if fwd = "A2B" then a2b_exp
+                else null,
             weekDiff = 
                 if expectedDate = null then null 
-                else 
-                    (Date.Year(expectedDate) - Date.Year(CurrentDate)) * 52 + 
-                    (Date.WeekOfYear(expectedDate) - Date.WeekOfYear(CurrentDate))
+                else (Date.Year(expectedDate) - Date.Year(CurrentDate)) * 52 + 
+                     (Date.WeekOfYear(expectedDate) - Date.WeekOfYear(CurrentDate))
         in
             if weekDiff = null then null
             else if weekDiff = -1 then "Inbound - Last Week"
@@ -52,37 +44,35 @@ let
             else "Inbound - Older than 2 Weeks"
     , type text),
 
-    // --- 4. GIT Value ---
-    WithGIT = Table.AddColumn(WithStatus, "GIT Value (€)", each [Units] * [Price], type number),
-
-    // --- 5. Year & Month ---
-    WithYear = Table.AddColumn(WithGIT, "Year (Current)", each Date.Year([ETD]), Int64.Type),
-    WithMonth = Table.AddColumn(WithYear, "Month (Current)", each Text.PadStart(Text.From(Date.Month([ETD])), 2, "0") & " - " & Text.Start(Date.MonthName([ETD]), 3), type text),
-    
-    // --- 6. Merge with Master Arrival Schedule ---
-    // Join Keys: {"INVOICE", "1633 Item Code"} -> {"FACT_Shipment_Actuals[Invoice]", "DIM_ProductMaster[MK_PRODUCT]"}
-    
-    MergedArrival = Table.NestedJoin(WithMonth, {"INVOICE", "1633 Item Code"}, MasterArrival, {"FACT_Shipment_Actuals[Invoice]", "DIM_ProductMaster[MK_PRODUCT]"}, "MasterArrivalSchedule", JoinKind.LeftOuter),
-    
+    // --- 4. Merge with Master Arrival Schedule ---
+    MergedArrival = Table.NestedJoin(WithStatus, {"INVOICE", "1633 Item Code"}, MasterArrival, {"FACT_Shipment_Actuals[Invoice]", "DIM_ProductMaster[MK_PRODUCT]"}, "MasterArrivalSchedule", JoinKind.LeftOuter),
     ExpandedArrival = Table.ExpandTableColumn(MergedArrival, "MasterArrivalSchedule", 
         {"FACT_Shipment_Actuals[Ship_To_Address1]", "FACT_Shipment_Actuals[Ship_To_Address2]", "FACT_Shipment_Actuals[Ship_To_Address3]"}, 
         {"FACT_Shipment_Actuals[Ship_To_Address1]", "FACT_Shipment_Actuals[Ship_To_Address2]", "FACT_Shipment_Actuals[Ship_To_Address3]"}),
 
-    // --- 7. Inbound Warehouse Logic ---
-    WithWarehouse = Table.AddColumn(ExpandedArrival, "Inbound Warehouse", each 
-        let 
-            pod = if [Port of Discharge] = null then null else Text.Trim([Port of Discharge])
-        in
-            if pod = "Belfast, Northern Ireland" then "075-XI"
-            else if pod = "United Kingdom, Derby" then "075-UL"
-            else if pod = "United Kingdom, Queenborough" then "075-UK"
-            else "Check Port of Discharge"
-    , type text),
+    // --- 5–8. Single-pass enrichment (replaces 5 chained Table.AddColumn) ---
+    Enriched = Table.FromRecords(
+        Table.TransformRows(ExpandedArrival, (row) =>
+            let
+                etd = row[ETD],
+                pod = if row[Port of Discharge] = null then null 
+                      else Text.Trim(row[Port of Discharge]),
+                addr1 = Record.FieldOrDefault(row, "FACT_Shipment_Actuals[Ship_To_Address1]", null)
+            in Record.Combine({row, [
+                #"GIT Value (£,£)" = row[Units] * row[Price],
+                #"Year (Current)" = Date.Year(etd),
+                #"Month (Current)" = Text.PadStart(Text.From(Date.Month(etd)), 2, "0") 
+                                     & " - " & Text.Start(Date.MonthName(etd), 3),
+                #"Inbound Warehouse" = 
+                    if pod = "Belfast, Northern Ireland" then "075-XI"
+                    else if pod = "United Kingdom, Derby" then "075-UL"
+                    else if pod = "United Kingdom, Queenborough" then "075-UK"
+                    else "Check Port of Discharge",
+                #"Warehouse Name" = if addr1 = "2 MARSHALLS ROAD" then "BELFAST" else null
+            ]})
+        )
+    ),
 
-    // --- 8. Warehouse Name Logic ---
-    WithWarehouseName = Table.AddColumn(WithWarehouse, "Warehouse Name", each 
-        if [#"FACT_Shipment_Actuals[Ship_To_Address1]"] = "2 MARSHALLS ROAD" then "BELFAST" else null, type text),
-
-    Completed = WithWarehouseName
+    Completed = Enriched
 in
     Completed

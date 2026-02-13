@@ -1,5 +1,5 @@
 let
-    Source = fct_Inventory_Batch,
+    Source = Table.Buffer(fct_Inventory_Batch),
     
     // Logic 1: OOP Adult
     // Filter: ([#"ADULT/PAED"] = "ADULT") and ([#"REIMBURSED/OOP"] = "OOP")

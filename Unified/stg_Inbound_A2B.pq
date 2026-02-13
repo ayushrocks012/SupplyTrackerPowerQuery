@@ -2,16 +2,7 @@ let
     // --- Dependencies (Shared Base) ---
     DemandPath = fn_SharePointBase[DailyTracker],
     
-    // --- Helper Logic (Inlined) ---
-    GetLatestFile = (Folder as table, StartsWith as text, EndsWith as text) =>
-        let
-            Filtered = Table.SelectRows(Folder, each Text.StartsWith([Name], StartsWith) and Text.EndsWith([Name], EndsWith)),
-            Sorted = Table.Sort(Filtered, {{"Date modified", Order.Descending}}),
-            Latest = Table.First(Sorted)[Content]
-        in
-            Latest,
-
-    FileContent = GetLatestFile(DemandPath, "booking_overview", ".csv"),
+    FileContent = fn_GetLatestFile(DemandPath, "booking_overview", ".csv"),
     Csv = Csv.Document(FileContent, [Delimiter=",", Encoding=1252, QuoteStyle=QuoteStyle.Csv]),
     Promoted = Table.PromoteHeaders(Csv, [PromoteAllScalars=true]),
     Duplicated = Table.DuplicateColumn(Promoted, "Your Reference", "Your Reference - Copy"),

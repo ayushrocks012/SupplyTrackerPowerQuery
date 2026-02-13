@@ -1,68 +1,61 @@
 let
     // --- Dependencies (Shared Base) ---
-    DemandPath = fn_SharePointBase[DailyTracker],
-    
-    // --- Helper Logic (Inlined) ---
-    GetLatestFile = (Folder as table, StartsWith as text, EndsWith as text) =>
-        let
-            Filtered = Table.SelectRows(Folder, each Text.StartsWith([Name], StartsWith) and Text.EndsWith(Text.Lower([Name]), EndsWith)),
-            Sorted = Table.Sort(Filtered, {{"Date modified", Order.Descending}}),
-            Latest = Table.First(Sorted)[Content]
-        in
-            Latest,
-
-    FileContent = GetLatestFile(DemandPath, "LX02", ".xlsx"),
-    Excel = Excel.Workbook(FileContent, null, true),
-    Sheet = try Excel{[Item="Sheet1"]} otherwise Excel{[Name="Sheet1"]}, 
-    Data = Sheet[Data],
-    Promoted = Table.PromoteHeaders(Data, [PromoteAllScalars=true]),
+    Promoted = base_LX02_Raw,
     
     // Select relevant columns
     SelectedCols = Table.SelectColumns(Promoted,{"Material", "Batch", "Available stock", "Pick quantity", "SLED/BBD", "Storage Bin", "Storage Type"}),
-    WithWarehouse = Table.AddColumn(SelectedCols, "Warehouse", each "075-UK"),
 
-    // Storage Type Logic (AUK Specific)
-    WithStorageType = Table.AddColumn(WithWarehouse, "Combined Storage Type", each 
-             if [Storage Type] = "014" 							then "AVAILABLE"
-        else if [Storage Type] = "011" 							then "AVAILABLE"
-        else if [Storage Type] = "802" 							then "AVAILABLE"
-        else if [Storage Type] = "200" 							then "ALLOCATED"
-        else if [Storage Type] = "916" 							then "ALLOCATED"
-        else if [Storage Type] = "922" 							then "BLOCKED"
-        else if [Storage Type] = "904" 							then "SCHROTT" 
-        else if [Storage Type] = "999" 							then "SCHROTT"
-        else if [Storage Bin] = "STAGING"                       then "RECEIPT"
-        else "NEW STORAGE TYPE TO BE DECIDED"
-    ),
-    
-    // Storage Bin Logic (AUK Specific)
-    WithStorageBin = Table.AddColumn(WithStorageType, "Combined Storage Bin", each 
-             if [Combined Storage Type] = "ALLOCATED" then "ALLOCATED"
-        else if [Combined Storage Type] = "BLOCKED" then "BLOCKED" 
-        else if [Combined Storage Type] = "AVAILABLE" then "AVAILABLE"
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "DISPOSAL" then "SCRAP" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "DAMAGED" then "DAMAGED" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "CLOSEDOWN" then "INV RECON" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "DISPLAY" then "DISPLAY STOCK" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "GRIR" then "INV RECON" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "INVEST" then "UNDER INVESTIGATION" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "MOOG" then "FAILED PUMPS" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "PGI" then "CANCELLED PICK" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "QAHOLD" then "QCHOLD" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "QUERY" then "INV RECON" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "RETURNS" then "MANUAL RETURN ERROR" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "SCHROTT" then "SHORTDATE" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "TROLLEY" then "RETURN BLOCKED" 
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Bin] = "APPROVED" then "DESTRUCTION"
-        else if [Combined Storage Type] = "SCHROTT" and Text.StartsWith([Storage Bin], "NVP") then "INV RECON"
-        else if [Combined Storage Type] = "SCHROTT" and [Storage Type] = "904" then "RETURN BLOCKED"
-        else "NEW STORAGE BIN TO BE DECIDED"
+    // #4: Single-pass enrichment (replaces 4 chained Table.AddColumn)
+    Enriched = Table.FromRecords(
+        Table.TransformRows(SelectedCols, (row) =>
+            let
+                stType = row[Storage Type],
+                stBin = row[Storage Bin],
+                avail = row[Available stock],
+                pick = row[Pick quantity],
+
+                storageType =
+                    if stType = "014" or stType = "011" or stType = "802" then "AVAILABLE"
+                    else if stType = "200" or stType = "916" then "ALLOCATED"
+                    else if stType = "922" then "BLOCKED"
+                    else if stType = "904" or stType = "999" then "SCHROTT"
+                    else if stBin = "STAGING" then "RECEIPT"
+                    else "NEW STORAGE TYPE TO BE DECIDED",
+
+                storageBin =
+                    if storageType = "ALLOCATED" then "ALLOCATED"
+                    else if storageType = "BLOCKED" then "BLOCKED"
+                    else if storageType = "AVAILABLE" then "AVAILABLE"
+                    else if storageType = "SCHROTT" and stBin = "DISPOSAL" then "SCRAP"
+                    else if storageType = "SCHROTT" and stBin = "DAMAGED" then "DAMAGED"
+                    else if storageType = "SCHROTT" and stBin = "CLOSEDOWN" then "INV RECON"
+                    else if storageType = "SCHROTT" and stBin = "DISPLAY" then "DISPLAY STOCK"
+                    else if storageType = "SCHROTT" and stBin = "GRIR" then "INV RECON"
+                    else if storageType = "SCHROTT" and stBin = "INVEST" then "UNDER INVESTIGATION"
+                    else if storageType = "SCHROTT" and stBin = "MOOG" then "FAILED PUMPS"
+                    else if storageType = "SCHROTT" and stBin = "PGI" then "CANCELLED PICK"
+                    else if storageType = "SCHROTT" and stBin = "QAHOLD" then "QCHOLD"
+                    else if storageType = "SCHROTT" and stBin = "QUERY" then "INV RECON"
+                    else if storageType = "SCHROTT" and stBin = "RETURNS" then "MANUAL RETURN ERROR"
+                    else if storageType = "SCHROTT" and stBin = "SCHROTT" then "SHORTDATE"
+                    else if storageType = "SCHROTT" and stBin = "TROLLEY" then "RETURN BLOCKED"
+                    else if storageType = "SCHROTT" and stBin = "APPROVED" then "DESTRUCTION"
+                    else if storageType = "SCHROTT" and Text.StartsWith(stBin, "NVP") then "INV RECON"
+                    else if storageType = "SCHROTT" and stType = "904" then "RETURN BLOCKED"
+                    else "NEW STORAGE BIN TO BE DECIDED"
+            in
+                [
+                    #"Product Code" = row[Material],
+                    Batch = row[Batch],
+                    Expiry = row[#"SLED/BBD"],
+                    Warehouse = "075-UK",
+                    #"Combined Storage Type" = storageType,
+                    #"Combined Storage Bin" = storageBin,
+                    #"NET INVENTORY" = avail + pick
+                ]
+        )
     ),
 
-    WithNetInv = Table.AddColumn(WithStorageBin, "NET INVENTORY", each [Available stock] + [Pick quantity]),
-    
-    // Final Selection and Renaming
-    Renamed = Table.RenameColumns(WithNetInv, {{"Material", "Product Code"}, {"SLED/BBD", "Expiry"}}),
-    FinalSelection = Table.SelectColumns(Renamed, {"Product Code", "Batch", "Expiry", "Warehouse", "Combined Storage Type", "Combined Storage Bin", "NET INVENTORY"})
+    FinalSelection = Table.SelectColumns(Enriched, {"Product Code", "Batch", "Expiry", "Warehouse", "Combined Storage Type", "Combined Storage Bin", "NET INVENTORY"})
 in
     FinalSelection

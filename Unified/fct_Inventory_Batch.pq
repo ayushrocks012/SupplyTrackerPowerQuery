@@ -21,11 +21,11 @@ let
     // 4. Current Date Logic
     CurrentDate = Date.From(DateTime.LocalNow()),
     
-    // 5. Transform & Calculate
-    WithExpiry = Table.TransformColumnTypes(FilteredAvailable,{{"Expiry", type date}, {"SHIP SHELF LIFE", Int64.Type}}),
+    // 5. Type transforms deferred to end (single pass)
+    // Note: Expiry/SHIP SHELF LIFE types needed for calculations below
     
     // Days to Expiry
-    WithDaysToExpiry = Table.AddColumn(WithExpiry, "Days to Expiry", each Duration.Days([Expiry] - CurrentDate), Int64.Type),
+    WithDaysToExpiry = Table.AddColumn(FilteredAvailable, "Days to Expiry", each try Duration.Days(Date.From([Expiry]) - CurrentDate) otherwise null, Int64.Type),
     
     // 6. Merge with ADS
     MergedADS = Table.NestedJoin(WithDaysToExpiry, {"Product Code", "Warehouse"}, ADS, {"ECC CODE", "Location/Plant/Site"}, "ADS_Table", JoinKind.LeftOuter),
@@ -55,6 +55,6 @@ let
     MergedOnOrder = Table.NestedJoin(WithLastShipDate, {"Product Code", "Warehouse"}, OnOrder, {"ECC CODE", "Inbound Warehouse"}, "OnOrder_Table", JoinKind.LeftOuter),
     ExpandedOnOrder = Table.ExpandTableColumn(MergedOnOrder, "OnOrder_Table", {"OnOrderQty"}, {"OnOrderQty"}),
     
-    FinalTyped = Table.TransformColumnTypes(ExpandedOnOrder, {{"OnOrderQty", Int64.Type}, {"CurrMonthADS", type number}})
+    FinalTyped = Table.TransformColumnTypes(ExpandedOnOrder, {{"Expiry", type date}, {"SHIP SHELF LIFE", Int64.Type}, {"OnOrderQty", Int64.Type}, {"CurrMonthADS", type number}})
 in
     FinalTyped

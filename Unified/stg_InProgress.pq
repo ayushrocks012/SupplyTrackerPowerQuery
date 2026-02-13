@@ -2,24 +2,10 @@ let
     // --- Dependencies (Shared Base) ---
     DemandPath = fn_SharePointBase[Wholesaler],
     
-    // --- Helper Logic (Inlined) ---
-    GetLatestFile = (Folder as table, StartsWith as text, EndsWith as text) =>
-        let
-            Filtered = Table.SelectRows(Folder, each Text.StartsWith([Name], StartsWith) and Text.EndsWith([Name], EndsWith)),
-            Sorted = Table.Sort(Filtered, {{"Date modified", Order.Descending}}),
-            Latest = Table.First(Sorted)[Content]
-        in
-            Latest,
-            
     // Dependency: dim_ValidationClients
     Clients = dim_ValidationClients,
 
-    FileContent = GetLatestFile(DemandPath, "ABBOTT LINES IN PROGRESS", ".xls"), // Source: .xls or .xlsx? Original code says "EndsWith .xls" or "Excel.Workbook"
-    // Original code: Text.StartsWith([Name], "ABBOTT LINES IN PROGRESS") ...
-    // Note: If using "GetLatestFile" generic logic, I should check extension carefully
-    // Original code doesn't filter by extension explicit in the SelectRows, just StartsWith.
-    // It assumes ".xls" structure in workbook load.
-    // I'll stick to ".xls" or ".xlsx". Let's assume ".xls" based on typical "Daily Tracker" files.
+    FileContent = fn_GetLatestFile(DemandPath, "ABBOTT LINES IN PROGRESS", ".xls"),
     Excel = Excel.Workbook(FileContent, null, true),
     
     Data_Record = 
