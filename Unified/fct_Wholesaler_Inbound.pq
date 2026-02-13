@@ -21,7 +21,7 @@ let
     MergedA2B = Table.NestedJoin(FilteredETD, {"Breda Tour", "DEPARTURE"}, A2B, {"Breda Tour", "Departure"}, "A2B_Table", JoinKind.LeftOuter),
     
     ExpandedA2B = Table.ExpandTableColumn(MergedA2B, "A2B_Table", 
-        {"A2B.Expected Delivery Date"}, 
+        {"Expected Delivery Date"}, 
         {"A2B.Expected Delivery Date"}),
 
     // --- 3. Inbound Status Calculation ---
