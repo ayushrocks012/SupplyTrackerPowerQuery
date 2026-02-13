@@ -41,7 +41,8 @@ let
         {"EXP_DATE", type date}, 
         {"MFG_DATE", type date},
         {"FORWARDER", type text},
-        {"Port of Discharge", type text}
+        {"Port of Discharge", type text},
+        {"INVOICE", type text}
     })
 in
     Typed

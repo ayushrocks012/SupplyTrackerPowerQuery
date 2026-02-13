@@ -4,20 +4,17 @@ let
     A2B = stg_Inbound_A2B,   
     MasterArrival = stg_Arrival_Schedule,
 
-    // --- 0. Parameters (Logic from PBIWarehouse_NI_AAH.m) ---
+    // --- 0. Parameters ---
     MonthsBack = -2,
     MonthsForward = 6,
     CurrentDate = Date.From(DateTime.LocalNow()),
     StartDate = Date.AddMonths(CurrentDate, MonthsBack),
     EndDate = Date.AddMonths(CurrentDate, MonthsForward),
 
-    // --- 1. Filter by Date (Implicitly removes Grand Total) ---
-    // Logic: [ETD] >= StartDate and [ETD] <= EndDate
+    // --- 1. Filter by Date ---
     FilteredETD = Table.SelectRows(Source, each [ETD] >= StartDate and [ETD] <= EndDate),
 
     // --- 2. Merge with A2B ---
-    // Join Keys: {"Breda Tour", "DEPARTURE"} -> {"Breda Tour", "Departure"}
-    
     MergedA2B = Table.NestedJoin(FilteredETD, {"Breda Tour", "DEPARTURE"}, A2B, {"Breda Tour", "Departure"}, "A2B_Table", JoinKind.LeftOuter),
     
     ExpandedA2B = Table.ExpandTableColumn(MergedA2B, "A2B_Table", 
@@ -62,8 +59,17 @@ let
     WithYear = Table.AddColumn(WithGIT, "Year (Current)", each Date.Year([ETD]), Int64.Type),
     WithMonth = Table.AddColumn(WithYear, "Month (Current)", each Text.PadStart(Text.From(Date.Month([ETD])), 2, "0") & " - " & Text.Start(Date.MonthName([ETD]), 3), type text),
     
-    // --- 6. Inbound Warehouse Logic ---
-    WithWarehouse = Table.AddColumn(WithMonth, "Inbound Warehouse", each 
+    // --- 6. Merge with Master Arrival Schedule ---
+    // Join Keys: {"INVOICE", "1633 Item Code"} -> {"FACT_Shipment_Actuals[Invoice]", "DIM_ProductMaster[MK_PRODUCT]"}
+    
+    MergedArrival = Table.NestedJoin(WithMonth, {"INVOICE", "1633 Item Code"}, MasterArrival, {"FACT_Shipment_Actuals[Invoice]", "DIM_ProductMaster[MK_PRODUCT]"}, "MasterArrivalSchedule", JoinKind.LeftOuter),
+    
+    ExpandedArrival = Table.ExpandTableColumn(MergedArrival, "MasterArrivalSchedule", 
+        {"FACT_Shipment_Actuals[Ship_To_Address1]", "FACT_Shipment_Actuals[Ship_To_Address2]", "FACT_Shipment_Actuals[Ship_To_Address3]"}, 
+        {"FACT_Shipment_Actuals[Ship_To_Address1]", "FACT_Shipment_Actuals[Ship_To_Address2]", "FACT_Shipment_Actuals[Ship_To_Address3]"}),
+
+    // --- 7. Inbound Warehouse Logic ---
+    WithWarehouse = Table.AddColumn(ExpandedArrival, "Inbound Warehouse", each 
         let 
             pod = if [Port of Discharge] = null then null else Text.Trim([Port of Discharge])
         in
@@ -73,6 +79,10 @@ let
             else "Check Port of Discharge"
     , type text),
 
-    Completed = WithWarehouse
+    // --- 8. Warehouse Name Logic ---
+    WithWarehouseName = Table.AddColumn(WithWarehouse, "Warehouse Name", each 
+        if [#"FACT_Shipment_Actuals[Ship_To_Address1]"] = "2 MARSHALLS ROAD" then "BELFAST" else null, type text),
+
+    Completed = WithWarehouseName
 in
     Completed
