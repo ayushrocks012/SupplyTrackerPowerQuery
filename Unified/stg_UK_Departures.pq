@@ -25,9 +25,12 @@ let
     
     // Clean Empty Rows
     Cleaned = Table.SelectRows(Promoted, each not List.IsEmpty(List.RemoveMatchingItems(Record.FieldValues(_), {"", null}))),
+
+    // Filter "Grand Total"
+    Filtered = Table.SelectRows(Cleaned, each [ETD] <> "Grand Total" and [ETD] <> "Total"),
     
     // Type Transformation
-    Typed = Table.TransformColumnTypes(Cleaned,{
+    Typed = Table.TransformColumnTypes(Filtered,{
         {"ETD", type date}, 
         {"DEPARTURE", Int64.Type}, 
         {"Price", type number}, 

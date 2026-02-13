@@ -54,7 +54,10 @@ let
     // Proceed with Renaming
     Renamed = Table.RenameColumns(Expanded, {{"Status", "Sub status"}, {"Delivery Date", "Expected Delivery Date"}}),
     
-    WithStatus = Table.AddColumn(Renamed, "Status", each 
+    // Filter Grand Total
+    FilteredRows = Table.SelectRows(Renamed, each ([Booking ID] <> "Grand Total" and [Booking ID] <> "Total")),
+
+    WithStatus = Table.AddColumn(FilteredRows, "Status", each 
         if [Sub status] = "Accepted" then "Pending & Accepted" 
         else if [Sub status] = "Collected" then "Collected" 
         else if [Sub status] = "Completed" then "Delivered" 
