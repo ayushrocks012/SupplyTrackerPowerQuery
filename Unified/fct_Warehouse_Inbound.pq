@@ -38,11 +38,9 @@ let
         {"FACT_Shipment_Actuals[Ship_To_Address1]", "FACT_Shipment_Actuals[Ship_To_Address2]", "FACT_Shipment_Actuals[Ship_To_Address3]"}, 
         {"Ship_To_Address1", "Ship_To_Address2", "Ship_To_Address3"}),
 
-    // Warehouse Name from Arrival Schedule address
+    // Warehouse Name derived from Arrival Schedule Ship_To address (original logic)
     WithWarehouseName = Table.AddColumn(ExpandedArrival, "Warehouse Name", each 
-        if [Inbound Warehouse] = "075-XI" then "BELFAST"
-        else if [Inbound Warehouse] = "075-UL" then "ALLOGA"
-        else if [Inbound Warehouse] = "075-UK" then "SITTINGBOURNE"
+        if [Ship_To_Address1] = "2 MARSHALLS ROAD" then "BELFAST" 
         else null
     , type text),
 
