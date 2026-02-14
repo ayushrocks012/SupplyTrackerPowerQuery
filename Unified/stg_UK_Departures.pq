@@ -17,7 +17,7 @@ let
     Cleaned = Table.SelectRows(Promoted, each not List.IsEmpty(List.RemoveMatchingItems(Record.FieldValues(_), {"", null}))),
 
     // Filter "Grand Total"
-    Filtered = Table.SelectRows(Cleaned, each [ETD] <> "Grand Total" and [ETD] <> "Total"),
+    Filtered = Table.SelectRows(Cleaned, each [ETD] <> "Grand Total" and [ETD] <> "Total" and [DEPARTURE] <> "Grand Total"),
     
     // Type Transformation
     Typed = Table.TransformColumnTypes(Filtered,{

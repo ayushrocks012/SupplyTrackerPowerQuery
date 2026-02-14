@@ -43,13 +43,21 @@ let
     // This calculates how many months of sellable life are left.
     
     WithMTS = Table.AddColumn(ExpandedADS, "Months to Sell", each 
-        if [Days to Expiry] = null or [SHIP SHELF LIFE] = null then null 
-        else ([Days to Expiry] - [SHIP SHELF LIFE]) / 30, type number),
+        let 
+            dte = try [Days to Expiry] otherwise null,
+            ssl = try Number.From([SHIP SHELF LIFE]) otherwise null
+        in 
+            if dte = null or ssl = null then null 
+            else (dte - ssl) / 30, type number),
     
     // Last Ship Date (legacy Total_Inv_Batch.m line 16)
     WithLastShipDate = Table.AddColumn(WithMTS, "Last Ship Date", each 
-        if [Expiry] = null or [SHIP SHELF LIFE] = null then null 
-        else Date.AddDays([Expiry], -[SHIP SHELF LIFE]), type date),
+        let 
+            exp = try Date.From([Expiry]) otherwise null,
+            ssl = try Number.From([SHIP SHELF LIFE]) otherwise null
+        in 
+            if exp = null or ssl = null then null 
+            else Date.AddDays(exp, -ssl), type date),
     
     // 8. Merge with OnOrder
     MergedOnOrder = Table.NestedJoin(WithLastShipDate, {"Product Code", "Warehouse"}, OnOrder, {"ECC CODE", "Inbound Warehouse"}, "OnOrder_Table", JoinKind.LeftOuter),

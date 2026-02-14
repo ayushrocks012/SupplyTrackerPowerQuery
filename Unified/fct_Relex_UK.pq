@@ -66,7 +66,7 @@ let
         {"AAH Forecast 14 Days AAH", type number},
         {"Product-location Block Start Date", type date}, {"Product-location Block End Date", type date},
         {"Product-location comments", type text},
-        {"PIP code", Int64.Type}, {"AAH Pack Size AAH", type text},
+        {"PIP code", type text}, {"AAH Pack Size AAH", type text},
         {"AAH Purchase Price AAH", Currency.Type},
         {"AAH Sales Quantity Last 30 Days AAH", Int64.Type},
         {"AAH Sales Quantity Month -1 AAH", Int64.Type},
@@ -117,6 +117,32 @@ let
         )
     ),
 
+    // Re-apply types lost by Table.FromRecords/TransformRows
+    ReTyped = Table.TransformColumnTypes(WithAllABB, {
+        {"AAH Warehouse Name", type text}, {"AAH Warehouse Code", type text},
+        {"AAH Product Code", type text}, {"AAH Product Name", type text},
+        {"AAH On Hand AAH", Int64.Type}, {"AAH Open Orders AAH", Int64.Type},
+        {"AAH SOQ Today AAH", Int64.Type}, {"AAH SOQ Next 7 Day AAH", Int64.Type},
+        {"AAH On Hand DOH AAH", type number}, {"AAH On Hand + Open Orders DOH AAH", type number},
+        {"AAH On Hand + Open Orders + SOQ DOH AAH", type number},
+        {"AAH Forecast 14 Days AAH", type number},
+        {"Product-location Block Start Date", type date}, {"Product-location Block End Date", type date},
+        {"Product-location comments", type text},
+        {"PIP code", type text}, {"AAH Pack Size AAH", type text},
+        {"AAH Purchase Price AAH", Currency.Type},
+        {"AAH Sales Quantity Last 30 Days AAH", Int64.Type},
+        {"AAH Sales Quantity Month -1 AAH", Int64.Type},
+        {"AAH Sales Quantity Month -2 AAH", Int64.Type},
+        {"AAH Lead Time AAH", Int64.Type},
+        {"Abbott Factor", type text}, {"Abbott Factor N", type number},
+        {"AAH On Hand ABB", type number}, {"AAH Open Orders ABB", type number},
+        {"AAH SOQ Today ABB", type number}, {"AAH SOQ Next 7 Day ABB", type number},
+        {"AAH Forecast 14 Days ABB", type number},
+        {"AAH Sales Quantity Last 30 Days ABB", type number},
+        {"AAH Sales Quantity Month -1 ABB", type number},
+        {"AAH Sales Quantity Month -2 ABB", type number}
+    }),
+
     // 6. Weekday Plan Calculation
     OrderFieldNames = {"[SL] Order (Mon)","[SL] Order (Tue)","[SL] Order (Wed)","[SL] Order (Thu)","[SL] Order (Fri)"},
     WeekHeaders = {"Monday","Tuesday","Wednesday","Thursday","Friday"},
@@ -157,7 +183,7 @@ let
             Rec,
 
     // Apply Function
-    AddWeekPlan = Table.AddColumn(WithAllABB, "WeekPlan", each WeekPlanFromRow(_), type record),
+    AddWeekPlan = Table.AddColumn(ReTyped, "WeekPlan", each WeekPlanFromRow(_), type record),
     WithWeekdays = Table.ExpandRecordColumn(AddWeekPlan, "WeekPlan", WeekHeaders, WeekHeaders),
 
     // 7. Joins
@@ -199,7 +225,7 @@ let
 
     // Forecast Daily
     WithForecastDailyAAH = Table.AddColumn(FinalClean, "AAH Forecast Daily AAH", each if [AAH Forecast 14 Days AAH] <> null then [AAH Forecast 14 Days AAH]/14 else null, type number),
-    WithForecastDailyABB = Table.AddColumn(WithForecastDailyAAH, "AAH Forecast Daily ABB", each if [AAH Forecast 14 Days ABB] <> null then [AAH Forecast 14 Days ABB]/14 else null, type number),
+    WithForecastDailyABB = Table.AddColumn(WithForecastDailyAAH, "AAH Forecast Daily ABB", each if [AAH Forecast 14 Days ABB] <> null then [AAH Forecast 14 Days ABB]/14 else null, type number)
 
 in
     WithForecastDailyABB

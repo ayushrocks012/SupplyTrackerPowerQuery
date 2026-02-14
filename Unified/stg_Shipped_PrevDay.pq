@@ -22,6 +22,7 @@ let
     
     // Merge with ValidationClients
     Merged = Table.NestedJoin(Filtered, {"Postcode"}, Clients, {"Postcode"}, "ValidationClients", JoinKind.LeftOuter),
-    Expanded = Table.ExpandTableColumn(Merged, "ValidationClients", {"Town"}, {"Town"})
+    Expanded = Table.ExpandTableColumn(Merged, "ValidationClients", {"Town"}, {"Town"}),
+    Typed = Table.TransformColumnTypes(Expanded, {{"Qty Ordered", Int64.Type}, {"Qty Picked", Int64.Type}, {"Qty Shipped", Int64.Type}, {"Shipped Date", type date}, {"Ship By Date", type date}, {"Town", type text}})
 in
-    Expanded
+    Typed
